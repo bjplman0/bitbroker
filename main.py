@@ -1,10 +1,11 @@
 import pygame
 import sys
+import settings
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((1280, 720))
-    pygame.display.set_caption("Jatek v0.1")
+    screen = pygame.display.set_mode((settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT))
+    pygame.display.set_caption(settings.WINDOW_TITLE)
     clock = pygame.time.Clock()
     
     running = True
@@ -12,9 +13,9 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False 
-        screen.fill((0, 0, 0))
+        screen.fill(settings.COLOR_BG)
         pygame.display.flip()
-        clock.tick(60)
+        clock.tick(settings.FPS)
     pygame.quit()
     sys.exit()
 
