@@ -21,3 +21,22 @@ class Server:
                 self.temperature -= 0.2 * dt
                 if self.temperature < 30.0:
                     self.temperature = 30.0
+
+
+class EconomyModel:
+    def __init__(self, starting_balance):
+        self.balance = starting_balance
+        self.servers = []
+
+    def add_server(self, server):
+        self.servers.append(server)
+
+    def update(self, dt):
+        total_opex = 0.0
+        for server in self.servers:
+            server.update(dt)
+            if server.is_active:
+                total_opex += server.opex_per_sec * dt
+            else:
+                total_opex += (server.opex_per_sec * 0.2) * dt
+        self.balance -= total_opex
