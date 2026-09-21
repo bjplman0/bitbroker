@@ -1,3 +1,13 @@
+from settings import (
+    SERVER_BASE_TEMP,
+    SERVER_HEATING_RATE,
+    SERVER_COOLING_RATE,
+    MARKET_TICK_RATE,
+    MARKET_CATEGORIES_CONFIG
+)
+import random
+
+
 class Job:
     def __init__(self, name, total_work, data_type):
         self.name = name
@@ -16,7 +26,7 @@ class Server:
         self.idle_multiplier = idle_multiplier
 
         self.is_active = False
-        self.temperature = 30.0
+        self.temperature = SERVER_BASE_TEMP
         self.current_job= None
 
     def start_job(self, job):
@@ -31,7 +41,7 @@ class Server:
         finished_job = None
 
         if self.is_active and self.current_job is not None:
-            self.temperature += 0.1 * dt
+            self.temperature += SERVER_HEATING_RATE * dt
             self.current_job.remaining_work -= self.processing_speed * dt
 
             if self.current_job.remaining_work <= 0:
@@ -45,14 +55,12 @@ class Server:
                 self.is_active = False
                 print(f"[{self.name}] has overheated and is temporarily paused.")
         else:
-            if self.temperature > 30.0:
-                self.temperature -= 0.2 * dt
-                if self.temperature < 30.0:
-                    self.temperature = 30.0
+            if self.temperature > SERVER_BASE_TEMP:
+                self.temperature -= SERVER_COOLING_RATE * dt
+                if self.temperature < SERVER_BASE_TEMP:
+                    self.temperature = SERVER_BASE_TEMP
 
         return finished_job
-
-import random
 
 class DataCategory:
     def __init__(self, name, base_price, volatility, gravity):
@@ -73,15 +81,17 @@ class DataCategory:
 
 class Market:
     def __init__(self):
-        self.categories = {
-            "Personal": DataCategory("Personal", 100.0, 0.1, 0.05),
-            "Small Business": DataCategory("Small Business", 1000.0, 0.2, 0.1),
-            "Large Corporation": DataCategory("Large Corporation", 10000.0, 0.3, 0.2),
-            "Government": DataCategory("Government", 10000.0, 0.3, 0.2),
-            "Military": DataCategory("Military", 100000.0, 0.4, 0.3),
-        }
+        self.categories = {}
+        for name, data in MARKET_CATEGORIES_CONFIG.items():
+            self.categories[name] = DataCategory(
+                name = name,
+                base_price = data["base_price"],
+                volatility = data["volatility"],
+                gravity = data["gravity"]
+            )
+
         self.time_since_last_tick = 0.0
-        self.tick_rate = 1.0
+        self.tick_rate = MARKET_TICK_RATE
 
     def update(self, dt):
         self.time_since_last_tick += dt
