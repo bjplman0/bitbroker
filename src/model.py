@@ -62,6 +62,9 @@ class Server:
                 self.temperature -= SERVER_COOLING_RATE * dt
                 if self.temperature < SERVER_BASE_TEMP:
                     self.temperature = SERVER_BASE_TEMP
+                    if self.current_job is not None:
+                        self.is_active = True
+                        print(f"[{self.name}] cooled down. Resuming job: {self.current_job.name}")
 
         return finished_job
 
