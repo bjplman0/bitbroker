@@ -20,27 +20,45 @@ class GameView:
 
         title_text = self.font.render("---BLACKMARKET---", False, COLOR_TEXT)
         self.screen.blit(title_text, (20, 20))
-        y_offset = 70
+        y_offset = 100
+
         for category in economy.market.categories.values():
-            price_str = f"{category.name}: ${category.current_price:.2f}"
+
+            price_str = f"{category.name}: {category.current_price:,.0f} CR"
             text_surface = self.font.render(price_str, False, COLOR_TEXT)
             self.screen.blit(text_surface, (20, y_offset))
 
-            price_range = category.max_price - category.min_price
-            current_progress = category.current_price - category.min_price
+            graph_width = market_width - 40
+            graph_height = 80
+            graph_rect = pygame.Rect(20, y_offset + 40, graph_width, graph_height)
+            pygame.draw.rect(self.screen, COLOR_BORDER, graph_rect, 1)
 
-            fill_percentage = 0
-            if price_range > 0:
-                fill_percentage = max(0.0, min(1.0, current_progress / price_range))
+            if hasattr(category, 'price_history') and len(category.price_history) > 1:
+                points = []
+                
+                local_min = min(category.price_history)
+                local_max = max(category.price_history)
+                
+                if local_max == local_min:
+                    local_max += 10
+                    local_min -= 10
+                
+                padding = (local_max - local_min) * 0.1
+                display_max = local_max + padding
+                display_min = local_min - padding
+                price_range = display_max - display_min
 
-            bar_width = market_width - 40
-            bar_height = 15
-            fill_width = int(bar_width * fill_percentage)
+                for i, past_price in enumerate(category.price_history):
+                    px = graph_rect.x + (i / (category.history_length - 1)) * graph_width
+                    
+                    normalized_y = (past_price - display_min) / price_range
+                    
+                    py = graph_rect.y + graph_rect.height - (normalized_y * graph_rect.height)
+                    points.append((px, py))
 
-            pygame.draw.rect(self.screen, COLOR_BORDER, (20, y_offset + 30, bar_width, bar_height), 1)
-            pygame.draw.rect(self.screen, COLOR_TEXT, (20, y_offset + 30, fill_width, bar_height))
+                pygame.draw.aalines(self.screen, COLOR_TEXT, False, points)
 
-            y_offset += 80
+            y_offset += 170
 
         pygame.draw.rect(self.screen, COLOR_PANEL, (market_width, 0, server_width, SCREEN_HEIGHT))
         pygame.draw.rect(self.screen, COLOR_BORDER, (market_width, 0, server_width, SCREEN_HEIGHT), 2)

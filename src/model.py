@@ -3,7 +3,8 @@ from settings import (
     SERVER_HEATING_RATE,
     SERVER_COOLING_RATE,
     MARKET_TICK_RATE,
-    MARKET_CATEGORIES_CONFIG
+    MARKET_CATEGORIES_CONFIG,
+    MARKET_HISTORY_LENGTH
 )
 import random
 
@@ -77,6 +78,8 @@ class DataCategory:
         self.gravity = gravity
         self.min_price = min_price
         self.max_price = max_price
+        self.history_length = MARKET_HISTORY_LENGTH
+        self.price_history = [base_price] * self.history_length
 
     def update_price(self):
         fluctuation = random.uniform(-self.volatility, self.volatility) * self.base_price
@@ -85,6 +88,10 @@ class DataCategory:
         self.current_price += fluctuation + pull
 
         self.current_price = max(self.min_price, min(self.current_price, self.max_price))
+
+        self.price_history.append(self.current_price)
+        if len(self.price_history) > self.history_length:
+            self.price_history.pop(0)
 
 class Market:
     def __init__(self):
