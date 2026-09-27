@@ -128,6 +128,14 @@ class EconomyModel:
     def add_job(self, job):
         self.jobs.append(job)
 
+    def assign_job_to_server(self, server_index, job):
+        if job not in self.jobs:
+            print("Job not found in the job list.")
+            return
+        
+        server = self.servers[server_index]
+        server.start_job(job)
+
     def sell_job(self, job):
         if job in self.jobs and job.is_decrypted:
             price = self.market.get_price(job.data_type)
