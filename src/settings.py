@@ -22,28 +22,40 @@ MARKET_TICK_RATE = 1.0
 
 MARKET_CATEGORIES_CONFIG = {
     "Personal": {
-        "base_price": 100.0,
-        "volatility": 0.1,
-        "gravity": 0.05
+        "base_price": 250.0,
+        "volatility": 0.015,
+        "gravity": 0.005,
+        "min_price": 50.0,
+        "max_price": 600.0
     },
     "Small Business": {
-        "base_price": 1000.0,
-        "volatility": 0.2,
-        "gravity": 0.1
+        "base_price": 4500.0,
+        "volatility": 0.02,
+        "gravity": 0.008,
+        "min_price": 1500.0,
+        "max_price": 12000.0
     },
     "Large Corporation": {
-        "base_price": 10000.0,
-        "volatility": 0.3,
-        "gravity": 0.2
+        "base_price": 55000.0,
+        "volatility": 0.04,
+        "gravity": 0.002,
+        "min_price": 10000.0,
+        "max_price": 160000.0
     },
     "Government": {
-        "base_price": 10000.0,
-        "volatility": 0.3,
-        "gravity": 0.2
+        "base_price": 55000.0,
+        "volatility": 0.008,
+        "gravity": 0.05,
+        "min_price": 45000.0,
+        "max_price": 70000.0
     },
     "Military": {
-        "base_price": 100000.0,
-        "volatility": 0.4,
-        "gravity": 0.3
+        "base_price": 1500000.0,
+        "volatility": 0.025,
+        "gravity": 0.005,
+        "min_price": 500000.0,
+        "max_price": 4500000.0
     }
 }
+
+#copy notes from textbook to here or to a separate file for reference

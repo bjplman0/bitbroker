@@ -33,6 +33,9 @@ class Server:
         if self.is_active or self.current_job is not None:
             print(f"[{self.name}] is already working on a job. Cannot start a new job.")
             return
+        if job.is_decrypted:
+            print(f"[{self.name}] cannot start job: {job.name} is already decrypted.")
+            return
         self.current_job = job
         self.is_active = True
         print(f"[{self.name}] is working on: {self.current_job.name}")
@@ -63,12 +66,14 @@ class Server:
         return finished_job
 
 class DataCategory:
-    def __init__(self, name, base_price, volatility, gravity):
+    def __init__(self, name, base_price, volatility, gravity, min_price, max_price):
         self.name = name
         self.base_price = base_price
         self.current_price = base_price
         self.volatility = volatility
         self.gravity = gravity
+        self.min_price = min_price
+        self.max_price = max_price
 
     def update_price(self):
         fluctuation = random.uniform(-self.volatility, self.volatility) * self.base_price
@@ -76,8 +81,7 @@ class DataCategory:
         pull = distance * self.gravity
         self.current_price += fluctuation + pull
 
-        if self.current_price < 0:
-            self.current_price = 0
+        self.current_price = max(self.min_price, min(self.current_price, self.max_price))
 
 class Market:
     def __init__(self):
@@ -87,7 +91,9 @@ class Market:
                 name = name,
                 base_price = data["base_price"],
                 volatility = data["volatility"],
-                gravity = data["gravity"]
+                gravity = data["gravity"],
+                min_price = data["min_price"],
+                max_price = data["max_price"]
             )
 
         self.time_since_last_tick = 0.0
