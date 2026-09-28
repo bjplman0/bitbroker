@@ -24,7 +24,7 @@ class GameView:
 
         for category in economy.market.categories.values():
 
-            price_str = f"{category.name}: {category.current_price:,.0f} CR"
+            price_str = f"{category.name}: ${category.current_price:,.0f}"
             text_surface = self.font.render(price_str, False, COLOR_TEXT)
             self.screen.blit(text_surface, (20, y_offset))
 
@@ -67,7 +67,7 @@ class GameView:
         pygame.draw.rect(self.screen, COLOR_PANEL, (finance_x, 0, finance_width, SCREEN_HEIGHT))
         pygame.draw.rect(self.screen, COLOR_BORDER, (finance_x, 0, finance_width, SCREEN_HEIGHT), 2)
 
-        balance_text = self.font.render(f"Balance: ${economy.balance:.2f}", False, (0, 255, 0))
+        balance_text = self.font.render(f"Balance: ${economy.balance:.2f}", False, COLOR_TEXT)
         self.screen.blit(balance_text, (finance_x + 20, 20))
 
         pygame.display.flip()

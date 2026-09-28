@@ -28,7 +28,7 @@ class Server:
 
         self.is_active = False
         self.temperature = SERVER_BASE_TEMP
-        self.current_job= None
+        self.current_job = None
 
     def start_job(self, job):
         if self.is_active or self.current_job is not None:
