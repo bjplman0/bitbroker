@@ -44,7 +44,7 @@ class GameView:
             graph_rect = pygame.Rect(start_x + 20, y_offset + 40, graph_width, graph_height)
             pygame.draw.rect(self.screen, COLOR_BORDER, graph_rect, 1)
 
-            if hasattr(category, 'price_history') and len(category.price_history) > 1:
+            if len(category.price_history) > 1:
                 points = []
                 
                 local_min = min(category.price_history)
