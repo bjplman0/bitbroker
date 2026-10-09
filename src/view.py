@@ -21,10 +21,13 @@ class GameView:
 
         pygame.display.flip()
 
-    def _draw_market_panel(self, market, start_x, width):
-
+    def _draw_panel_bg(self, start_x, width):
         pygame.draw.rect(self.screen, COLOR_PANEL, (start_x, 0, width, SCREEN_HEIGHT))
         pygame.draw.rect(self.screen, COLOR_BORDER, (start_x, 0, width, SCREEN_HEIGHT), 2)
+
+    def _draw_market_panel(self, market, start_x, width):
+
+        self._draw_panel_bg(start_x, width)
 
         title_text = self.font.render("---BLACKMARKET---", False, COLOR_TEXT)
         self.screen.blit(title_text, (start_x + 20, 20))
@@ -68,16 +71,14 @@ class GameView:
 
     def _draw_server_panel(self, servers, start_x, width):
 
-        pygame.draw.rect(self.screen, COLOR_PANEL, (start_x, 0, width, SCREEN_HEIGHT))
-        pygame.draw.rect(self.screen, COLOR_BORDER, (start_x, 0, width, SCREEN_HEIGHT), 2)
-        
+        self._draw_panel_bg(start_x, width)
+
         title_text = self.font.render("---SERVERPARK---", False, COLOR_TEXT)
         self.screen.blit(title_text, (start_x + 20, 20))
 
     def _draw_finance_panel(self, economy, start_x, width):
 
-        pygame.draw.rect(self.screen, COLOR_PANEL, (start_x, 0, width, SCREEN_HEIGHT))
-        pygame.draw.rect(self.screen, COLOR_BORDER, (start_x, 0, width, SCREEN_HEIGHT), 2)
+        self._draw_panel_bg(start_x, width)
 
         balance_text = self.font.render(f"Balance: ${economy.balance:.2f}", False, COLOR_TEXT)
         self.screen.blit(balance_text, (start_x + 20, 20))
