@@ -7,6 +7,7 @@ from settings import (
     MARKET_HISTORY_LENGTH
 )
 import random
+from enum import Enum
 
 
 class Job:
@@ -17,6 +18,11 @@ class Job:
         self.data_type = data_type
         self.is_decrypted = False
 
+class ServerState(Enum):
+    IDLE = "IDLE"
+    WORKING = "WORKING"
+    OVERHEATED = "OVERHEATED"
+
 class Server:
     def __init__(self, name, capex, opex, processing_speed, max_temperature, idle_multiplier):
         self.name = name
@@ -26,46 +32,51 @@ class Server:
         self.max_temperature = max_temperature
         self.idle_multiplier = idle_multiplier
 
-        self.is_active = False
+        self.state = ServerState.IDLE
         self.temperature = SERVER_BASE_TEMP
         self.current_job = None
 
     def start_job(self, job):
-        if self.is_active or self.current_job is not None:
-            print(f"[{self.name}] is already working on a job. Cannot start a new job.")
+        if self.state != ServerState.IDLE:
+            print(f"[{self.name}] cannot start job. Server is currently {self.state.name}.")
             return
         if job.is_decrypted:
             print(f"[{self.name}] cannot start job: {job.name} is already decrypted.")
             return
+        
         self.current_job = job
-        self.is_active = True
-        print(f"[{self.name}] is working on: {self.current_job.name}")
+        self.state = ServerState.WORKING
+        print(f"[{self.name}] is now working on: {self.current_job.name}")
         
     def update(self, dt):
         finished_job = None
 
-        if self.is_active and self.current_job is not None:
+        if self.state == ServerState.WORKING:
             self.temperature += SERVER_HEATING_RATE * dt
             self.current_job.remaining_work -= self.processing_speed * dt
-
             if self.current_job.remaining_work <= 0:
                 self.current_job.remaining_work = 0
                 self.current_job.is_decrypted = True
                 finished_job = self.current_job
-                self.is_active = False
                 self.current_job = None
-                print(f"[{self.name}] finished job: {finished_job.name}")
+                self.state = ServerState.IDLE
             elif self.temperature > self.max_temperature:
-                self.is_active = False
-                print(f"[{self.name}] has overheated and is temporarily paused.")
-        else:
+                self.state = ServerState.OVERHEATED
+
+        elif self.state == ServerState.OVERHEATED:
+            self.temperature -= SERVER_COOLING_RATE * dt
+            if self.temperature < SERVER_BASE_TEMP:
+                self.temperature = SERVER_BASE_TEMP
+                if self.current_job is not None:
+                    self.state = ServerState.WORKING
+                else:
+                    self.state = ServerState.IDLE
+
+        elif self.state == ServerState.IDLE:
             if self.temperature > SERVER_BASE_TEMP:
                 self.temperature -= SERVER_COOLING_RATE * dt
                 if self.temperature < SERVER_BASE_TEMP:
                     self.temperature = SERVER_BASE_TEMP
-                    if self.current_job is not None:
-                        self.is_active = True
-                        print(f"[{self.name}] cooled down. Resuming job: {self.current_job.name}")
 
         return finished_job
 
