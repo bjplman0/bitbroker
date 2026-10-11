@@ -172,7 +172,7 @@ class EconomyModel:
             finished_job = server.update(dt)
             if finished_job is not None:
                 pass
-            if server.is_active:
+            if server.state in [ServerState.WORKING, ServerState.OVERHEATED]:
                 total_opex += server.opex_per_sec * dt
             else:
                 total_opex += (server.opex_per_sec * server.idle_multiplier) * dt
