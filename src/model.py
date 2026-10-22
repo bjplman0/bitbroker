@@ -4,19 +4,55 @@ from settings import (
     SERVER_COOLING_RATE,
     MARKET_TICK_RATE,
     MARKET_CATEGORIES_CONFIG,
-    MARKET_HISTORY_LENGTH
+    MARKET_HISTORY_LENGTH,
+    JOB_GENERATION_INTERVAL,
+    JOB_POOL_MAX_SIZE,
+    JOB_WORK_VARIANCE,
+    JOB_COST_RATIO
 )
+from name_generator import generate_name
 import random
 from enum import Enum
 
 
 class Job:
-    def __init__(self, name, total_work, data_type):
+    def __init__(self, name, total_work, data_type, cost = 0.0):
         self.name = name
         self.total_work = total_work
         self.remaining_work = total_work
         self.data_type = data_type
+        self.cost = cost
         self.is_decrypted = False
+
+class JobGenerator:
+    def __init__(self, market):
+        self.market = market
+        self.time_since_last_spawn = 0.0
+        self.spawn_interval = JOB_GENERATION_INTERVAL
+        self.pool_max_size = JOB_POOL_MAX_SIZE
+
+    def update(self, dt, current_pool_size):
+        self.time_since_last_spawn += dt
+
+        if self.time_since_last_spawn > self.spawn_interval:
+            self.time_since_last_spawn = 0.0
+            if current_pool_size < self.pool_max_size:
+                return self._generate_job()
+
+        return None
+
+    def _generate_job(self):
+        category_name = random.choice(list(self.market.categories.keys()))
+        category = self.market.categories[category_name]
+        config = MARKET_CATEGORIES_CONFIG[category_name]
+
+        variance = random.uniform(1.0 - JOB_WORK_VARIANCE, 1.0 + JOB_WORK_VARIANCE)
+        total_work = round(config["job_work_base"] * variance, 1)
+        cost = round(category.current_price * JOB_COST_RATIO, 2)
+
+        name = generate_name(category_name)
+
+        #return Job(name=name, total_work=total_work, data_type=category_name, cost=cost)
 
 class ServerState(Enum):
     IDLE = "IDLE"
@@ -139,12 +175,27 @@ class EconomyModel:
         self.servers = []
         self.jobs = []
         self.market = Market()
+        self.job_market = []
+        self.job_generator = JobGenerator(self.market)
 
     def add_server(self, server):
         self.servers.append(server)
 
     def add_job(self, job):
         self.jobs.append(job)
+
+    def buy_job(self, job):
+        if job not in self.job_market:
+            print(f"Cannot buy job: {job.name} is not available in the job market.")
+            return
+        if self.balance < job.cost:
+            print(f"Cannot buy job: {job.name}. Insufficient balance (needs ${job.cost:.2f}).")
+            return
+
+        self.balance -= job.cost
+        self.job_market.remove(job)
+        self.add_job(job)
+        print(f"Bought job: {job.name} for ${job.cost:.2f}. New balance: ${self.balance:.2f}")
 
     def assign_job_to_server(self, server_index, job):
         if job not in self.jobs:
@@ -165,6 +216,10 @@ class EconomyModel:
 
     def update(self, dt):
         self.market.update(dt)
+
+        new_job = self.job_generator.update(dt, len(self.job_market))
+        if new_job is not None:
+            self.job_market.append(new_job)
 
         total_opex = 0.0
 
