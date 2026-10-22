@@ -9,4 +9,8 @@ def generate_name(category_name):
         return f"Unknown-{category_name}"
 
     template = random.choice(templates)
-    return template.format(**{key:random.choice(values) for key, values in pools.items()})
+    kwargs = {key: random.choice(values) for key, values in pools.items()}
+    if category_name == "Military":
+        kwargs["number"] = random.randint(1, 99)
+
+    return template.format(**kwargs)
