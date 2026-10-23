@@ -52,7 +52,7 @@ class JobGenerator:
 
         name = generate_name(category_name)
 
-        #return Job(name=name, total_work=total_work, data_type=category_name, cost=cost)
+        return Job(name=name, total_work=total_work, data_type=category_name, cost=cost)
 
 class ServerState(Enum):
     IDLE = "IDLE"
@@ -220,6 +220,8 @@ class EconomyModel:
         new_job = self.job_generator.update(dt, len(self.job_market))
         if new_job is not None:
             self.job_market.append(new_job)
+
+            # print(f"New job available: {new_job.name} ({new_job.data_type}, cost: ${new_job.cost:.2f}, work: {new_job.total_work})")
 
         total_opex = 0.0
 

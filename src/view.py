@@ -9,33 +9,52 @@ class GameView:
         pygame.display.set_caption(CAPTION)
         self.font = pygame.font.Font(FONT_PATH, FONT_SIZE)
         self.font_small = pygame.font.Font(FONT_PATH, FONT_SIZE_SMALL)
+        self.tab_rects = {}
 
-    def draw(self, economy):
+    def draw(self, economy, states, active_tab_key, mouse_pos):
         self.screen.fill(COLOR_BG)
 
-        market_w = int(SCREEN_WIDTH * 0.3)
-        server_w = int(SCREEN_WIDTH * 0.5)
-        finance_w = int(SCREEN_WIDTH * 0.2)
+        tabs = {key: state.label for key, state in states.items()}
+        self._draw_tab_bar(tabs, active_tab_key)
 
-        self._draw_market_panel(economy.market, 0, market_w)
-        self._draw_server_panel(economy.servers, market_w, server_w)
-        self._draw_finance_panel(economy, market_w + server_w, finance_w)
+        active_state = states[active_tab_key]
+        active_state.draw(self, economy, mouse_pos)
 
         pygame.display.flip()
 
+    def _draw_tab_bar(self, tabs, active_tab_key):
+        pygame.draw.rect(self.screen, COLOR_PANEL, (0, 0, SCREEN_WIDTH, TAB_BAR_HEIGHT))
+        pygame.draw.rect(self.screen, COLOR_BORDER, (0, 0, SCREEN_WIDTH, TAB_BAR_HEIGHT), 2)
+
+        self.tab_rects = {}
+        x = 20
+
+        for key, label in tabs.items():
+            is_active = (key == active_tab_key)
+            color = COLOR_TEXT if is_active else COLOR_TEXT_DIM
+
+            text_surface = self.font.render(label, False, color)
+            text_rect = text_surface.get_rect(topleft=(x, 12))
+            self.screen.blit(text_surface, text_rect)
+
+            self.tab_rects[key] = text_rect
+
+            x += text_rect.width + 40
+
     def _draw_panel_bg(self, start_x, width):
-        pygame.draw.rect(self.screen, COLOR_PANEL, (start_x, 0, width, SCREEN_HEIGHT))
-        pygame.draw.rect(self.screen, COLOR_BORDER, (start_x, 0, width, SCREEN_HEIGHT), 2)
+        panel_rect = pygame.Rect(start_x, TAB_BAR_HEIGHT, width, SCREEN_HEIGHT - TAB_BAR_HEIGHT)
+        pygame.draw.rect(self.screen, COLOR_PANEL, panel_rect)
+        pygame.draw.rect(self.screen, COLOR_BORDER, panel_rect, 2)
 
     def _draw_panel_title(self, text, start_x):
         title_text = self.font.render(text, False, COLOR_TEXT)
-        self.screen.blit(title_text, (start_x + 20, 20))
+        self.screen.blit(title_text, (start_x + 20, TAB_BAR_HEIGHT + 20))
 
     def _draw_market_panel(self, market, start_x, width):
         self._draw_panel_bg(start_x, width)
         self._draw_panel_title("---BLACKMARKET---", start_x)
         
-        y_offset = 100
+        y_offset = TAB_BAR_HEIGHT + 100
 
         for category in market.categories.values():
             price_str = f"{category.name}: ${category.current_price:,.0f}"
@@ -76,7 +95,7 @@ class GameView:
         self._draw_panel_bg(start_x, width)
         self._draw_panel_title("---SERVERPARK---", start_x)
 
-        y_offset = 100
+        y_offset = TAB_BAR_HEIGHT + 100
         rack_height = 150
         rack_padding = 20
         card_width = width - 40
@@ -154,4 +173,4 @@ class GameView:
 
         # title
         balance_text = self.font.render(f"Balance: ${economy.balance:.2f}", False, COLOR_TEXT)
-        self.screen.blit(balance_text, (start_x + 20, 20))
+        self.screen.blit(balance_text, (start_x + 20, TAB_BAR_HEIGHT + 20))
