@@ -14,7 +14,6 @@ from name_generator import generate_name
 import random
 from enum import Enum
 
-
 class Job:
     def __init__(self, name, total_work, data_type, cost = 0.0):
         self.name = name
@@ -201,9 +200,15 @@ class EconomyModel:
         if job not in self.jobs:
             print("Job not found in the job list.")
             return
+        if self.is_job_running(job):
+            print(f"Job {job.name} is already running on a server.")
+            return
         
         server = self.servers[server_index]
         server.start_job(job)
+
+    def is_job_running(self, job):
+        return any(server.current_job is job for server in self.servers)
 
     def sell_job(self, job):
         if job in self.jobs and job.is_decrypted:

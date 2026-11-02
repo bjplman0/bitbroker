@@ -41,7 +41,7 @@ class GameView:
         for hb in reversed(self.hitboxes):
             if hb["rect"].collidepoint(pos):
                 return (hb["kind"], hb["obj"])
-            return None
+        return None
 
     def _draw_dashboard(self, economy, mouse_pos, state):
         w = self.screen.get_width()
@@ -50,8 +50,8 @@ class GameView:
         finance_w = int(w * 0.2)
 
         self._draw_market_panel(economy.market, 0, market_w)
-        self._draw_server_panel(economy.servers, market_w, server_w)
-        self._draw_finance_panel(economy, market_w + server_w, finance_w)
+        self._draw_server_panel(economy.servers, market_w, server_w, mouse_pos, state.selected_job)
+        self._draw_finance_panel(economy, market_w + server_w, finance_w, mouse_pos, state.selected_job)
 
 
     def _draw_marketplace(self, economy, mouse_pos, state):
@@ -187,9 +187,14 @@ class GameView:
 
             y_offset += 170
 
-    def _draw_server_panel(self, servers, start_x, width):
+    def _draw_server_panel(self, servers, start_x, width, mouse_pos, selected_job):
         self._draw_panel_bg(start_x, width)
         self._draw_panel_title("---SERVERPARK---", start_x)
+
+        if selected_job is not None:
+            hint = self.font_small.render(
+                f"Select a server for: {selected_job.name}", False, COLOR_SELECT)
+            self.screen.blit(hint, (start_x + 20, TAB_BAR_HEIGHT + 65))
 
         y_offset = TAB_BAR_HEIGHT + 100
         rack_height = 150
@@ -204,11 +209,25 @@ class GameView:
 
         for server in servers:
             rect = pygame.Rect(start_x + 20, y_offset, card_width, rack_height)
+            self._add_hitbox(rect, "server", server)
+
             color = state_colors[server.state]
 
+            assignable = selected_job is not None and server.state == ServerState.IDLE
+            hovered = rect.collidepoint(mouse_pos)
+
+            bg = COLOR_ROW_HOVER if (assignable and hovered) else COLOR_PANEL_LIGHT
+            pygame.draw.rect(self.screen, bg, rect, border_radius=CARD_RADIUS)
+
+            if assignable:
+                pygame.draw.rect(self.screen, COLOR_SELECT, rect, 3, border_radius=CARD_RADIUS)
+            else:
+                pygame.draw.rect(self.screen, color, rect, 2, border_radius=CARD_RADIUS)
+
+            '''
             pygame.draw.rect(self.screen, COLOR_PANEL_LIGHT, rect, border_radius=CARD_RADIUS)
             pygame.draw.rect(self.screen, color, rect, 2, border_radius = CARD_RADIUS)
-
+            '''
             self._draw_server_header(server, rect, color)
             self._draw_temp_bar(server, rect, color)
             self._draw_progress_bar(server, rect)
@@ -264,9 +283,48 @@ class GameView:
             fill_rect = pygame.Rect(rect.x, rect.y, int(rect.width * pct), rect.height)
             pygame.draw.rect(self.screen, fill_color, fill_rect, border_radius=4)
 
-    def _draw_finance_panel(self, economy, start_x, width):
+    def _draw_finance_panel(self, economy, start_x, width, mouse_pos, selected_job):
         self._draw_panel_bg(start_x, width)
 
         # title
         balance_text = self.font.render(f"Balance: ${economy.balance:.2f}", False, COLOR_TEXT)
         self.screen.blit(balance_text, (start_x + 20, TAB_BAR_HEIGHT + 20))
+
+        y = TAB_BAR_HEIGHT + 90
+        title = self.font.render("--OWNED JOBS--", False, COLOR_TEXT)
+        self.screen.blit(title, (start_x + 20, y))
+        y += 45
+
+        if not economy.jobs:
+            empty = self.font_small.render("No jobs yet. Buy some!", False, COLOR_TEXT_DIM)
+            self.screen.blit(empty, (start_x + 20, y))
+            return
+
+        for job in economy.jobs:
+            rect = pygame.Rect(start_x + 10, y, width - 20, OWNED_ROW_HEIGHT - 4)
+
+            running = economy.is_job_running(job)
+            selectable = not job.is_decrypted and not running
+
+            if selectable:
+                self._add_hitbox(rect, "owned_job", job)
+
+            if job is selected_job:
+                pygame.draw.rect(self.screen, COLOR_SELECT, rect, 2, border_radius=4)
+            elif selectable and rect.collidepoint(mouse_pos):
+                pygame.draw.rect(self.screen, COLOR_ROW_HOVER, rect, border_radius=4)
+
+            if job.is_decrypted:
+                status = "DECRYPTED"
+            elif running:
+                status = "RUNNING"
+            else:
+                status = f"{job.remaining_work:,.0f} left"
+
+            name_color = COLOR_TEXT if selectable else COLOR_TEXT_DIM
+            name_surf = self.font_small.render(job.name, False, name_color)
+            info_surf = self.font_small.render(f"{job.data_type} | {status}", False, COLOR_TEXT_DIM)
+            self.screen.blit(name_surf, (rect.x + 8, rect.y + 6))
+            self.screen.blit(info_surf, (rect.x + 8, rect.y + 28))
+
+            y += OWNED_ROW_HEIGHT

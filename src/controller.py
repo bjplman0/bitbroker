@@ -72,11 +72,11 @@ class GameController:
         self.active_tab_key = new_tab_key
         self.states[self.active_tab_key].on_enter()
 
-    def _handle_mouse_click(self, hit):
+    def _handle_mouse_click(self, pos):
         for tab_key, rect in self.view.tab_rects.items():
-            if rect.collidepoint(hit):
+            if rect.collidepoint(pos):
                 self._switch_tab(tab_key)
                 return
 
-        hit = self.view.get_hit(hit)
+        hit = self.view.get_hit(pos)
         self.states[self.active_tab_key].handle_click(hit, self.model)
