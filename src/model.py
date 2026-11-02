@@ -211,13 +211,17 @@ class EconomyModel:
         return any(server.current_job is job for server in self.servers)
 
     def sell_job(self, job):
-        if job in self.jobs and job.is_decrypted:
-            price = self.market.get_price(job.data_type)
-            self.balance += price
-            self.jobs.remove(job)
-            print(f"Sold job: {job.name} for ${price:.2f}. New balance: ${self.balance:.2f}")
-        else:
-            print(f"Cannot sell job: {job.name}. It is either not in the job list or not decrypted.")
+        if job not in self.jobs or not job.is_decrypted:
+            print(f"Cannot sell job: {job.name}. It is either not owned or not decrypted.")
+            return
+        if job.data_type not in self.market.categories:
+            print(f"Cannot sell job: {job.name}. Unknown category '{job.data_type}'.")
+            return
+
+        price = self.market.get_price(job.data_type)
+        self.balance += price
+        self.jobs.remove(job)
+        print(f"Sold job: {job.name} for ${price:.2f}. New balance: ${self.balance:.2f}")
 
     def update(self, dt):
         self.market.update(dt)
@@ -225,8 +229,6 @@ class EconomyModel:
         new_job = self.job_generator.update(dt, len(self.job_market))
         if new_job is not None:
             self.job_market.append(new_job)
-
-            # print(f"New job available: {new_job.name} ({new_job.data_type}, cost: ${new_job.cost:.2f}, work: {new_job.total_work})")
 
         total_opex = 0.0
 

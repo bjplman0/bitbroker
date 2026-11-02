@@ -26,11 +26,14 @@ class DashboardState(BaseState):
 
         if kind == "owned_job":
             self.selected_job = None if obj is self.selected_job else obj
+        elif kind == "sellable_job":
+            economy.sell_job(obj)
         elif kind == "server" and self.selected_job is not None:
-            server_index = economy.servers.index(obj)
-            economy.assign_job_to_server(server_index, self.selected_job)
-            self.selected_job = None
-
+            if obj.state == ServerState.IDLE:
+                server_index = economy.servers.index(obj)
+                economy.assign_job_to_server(server_index, self.selected_job)
+                self.selected_job = None
+        
     def on_exit(self):
         self.selected_job = None
 

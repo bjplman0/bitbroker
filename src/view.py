@@ -53,7 +53,6 @@ class GameView:
         self._draw_server_panel(economy.servers, market_w, server_w, mouse_pos, state.selected_job)
         self._draw_finance_panel(economy, market_w + server_w, finance_w, mouse_pos, state.selected_job)
 
-
     def _draw_marketplace(self, economy, mouse_pos, state):
         panel_w = self.screen.get_width()
         self._draw_panel_bg(0, panel_w)
@@ -305,26 +304,37 @@ class GameView:
 
             running = economy.is_job_running(job)
             selectable = not job.is_decrypted and not running
+            sellable = job.is_decrypted
 
             if selectable:
                 self._add_hitbox(rect, "owned_job", job)
+            elif sellable:
+                self._add_hitbox(rect, "sellable_job", job)
 
             if job is selected_job:
                 pygame.draw.rect(self.screen, COLOR_SELECT, rect, 2, border_radius=4)
             elif selectable and rect.collidepoint(mouse_pos):
                 pygame.draw.rect(self.screen, COLOR_ROW_HOVER, rect, border_radius=4)
 
-            if job.is_decrypted:
-                status = "DECRYPTED"
-            elif running:
-                status = "RUNNING"
-            else:
-                status = f"{job.remaining_work:,.0f} left"
-
-            name_color = COLOR_TEXT if selectable else COLOR_TEXT_DIM
+            name_color = COLOR_TEXT if (selectable or sellable) else COLOR_TEXT_DIM
             name_surf = self.font_small.render(job.name, False, name_color)
-            info_surf = self.font_small.render(f"{job.data_type} | {status}", False, COLOR_TEXT_DIM)
             self.screen.blit(name_surf, (rect.x + 8, rect.y + 6))
+            
+            if sellable:
+                price = economy.market.get_price(job.data_type)
+                profit = price - job.cost
+                profit_color = COLOR_TEXT if profit >= 0 else COLOR_OVERHEAT
+                sign = "+" if profit >= 0 else "-"
+
+                sell_surf = self.font_small.render(f"SELL ${price:,.0f}", False, COLOR_SELECT)
+                self.screen.blit(sell_surf, (rect.right - sell_surf.get_width() - 8, rect.y + 6))
+
+                info = f"{job.data_type} | {sign}${abs(profit):,.0f}"
+                info_surf = self.font_small.render(info, False, profit_color)
+            else:
+                status = "RUNNING" if running else f"{job.remaining_work:,.0f} left"
+                info_surf = self.font_small.render(f"{job.data_type} | {status}", False, COLOR_TEXT_DIM)
+
             self.screen.blit(info_surf, (rect.x + 8, rect.y + 28))
 
             y += OWNED_ROW_HEIGHT
