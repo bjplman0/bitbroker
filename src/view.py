@@ -3,6 +3,13 @@ from settings import *
 from model import ServerState
 
 class GameView:
+    JOB_COLUMNS = [
+        ("NAME",     0.00, "left"),
+        ("CATEGORY", 0.40, "left"),
+        ("WORK",     0.70, "right"),
+        ("COST",     0.85, "right"),
+    ]
+    
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -10,17 +17,106 @@ class GameView:
         self.font = pygame.font.Font(FONT_PATH, FONT_SIZE)
         self.font_small = pygame.font.Font(FONT_PATH, FONT_SIZE_SMALL)
         self.tab_rects = {}
+        self.hitboxes = []
+        self.renderers = {
+            "dashboard": self._draw_dashboard,
+            "marketplace": self._draw_marketplace,
+        }
 
     def draw(self, economy, states, active_tab_key, mouse_pos):
         self.screen.fill(COLOR_BG)
+        self.hitboxes.clear()
 
         tabs = {key: state.label for key, state in states.items()}
         self._draw_tab_bar(tabs, active_tab_key)
 
-        active_state = states[active_tab_key]
-        active_state.draw(self, economy, mouse_pos)
+        self.renderers[active_tab_key](economy, mouse_pos, states[active_tab_key])
 
         pygame.display.flip()
+
+    def _add_hitbox(self, rect, kind, obj):
+        self.hitboxes.append({"rect": rect, "kind": kind, "obj": obj})
+
+    def get_hit(self, pos):
+        for hb in reversed(self.hitboxes):
+            if hb["rect"].collidepoint(pos):
+                return (hb["kind"], hb["obj"])
+            return None
+
+    def _draw_dashboard(self, economy, mouse_pos, state):
+        w = self.screen.get_width()
+        market_w = int(w * 0.3)
+        server_w = int(w * 0.5)
+        finance_w = int(w * 0.2)
+
+        self._draw_market_panel(economy.market, 0, market_w)
+        self._draw_server_panel(economy.servers, market_w, server_w)
+        self._draw_finance_panel(economy, market_w + server_w, finance_w)
+
+
+    def _draw_marketplace(self, economy, mouse_pos, state):
+        panel_w = self.screen.get_width()
+        self._draw_panel_bg(0, panel_w)
+        self._draw_panel_title("---JOB MARKET---", 0)
+
+        count_str = f"{len(economy.job_market)}/{economy.job_generator.pool_max_size}"
+        count_surf = self.font.render(count_str, False, COLOR_TEXT_DIM)
+        self.screen.blit(count_surf, (panel_w - TABLE_MARGIN - count_surf.get_width(),
+                                      TAB_BAR_HEIGHT + 20))
+
+        table_x = TABLE_MARGIN
+        table_w = panel_w - 2 * TABLE_MARGIN
+        y = TAB_BAR_HEIGHT + 90
+
+        for text, frac, align in self.JOB_COLUMNS:
+            self._blit_cell(self.font_small, text, COLOR_TEXT_DIM,
+                            table_x + 10, table_w - 20, frac, align, y)
+        y += 30
+        pygame.draw.line(self.screen, COLOR_BORDER, (table_x, y), (table_x + table_w, y), 2)
+        y += 4
+
+        if not economy.job_market:
+            empty = self.font.render("No jobs available right now...", False, COLOR_TEXT_DIM)
+            self.screen.blit(empty, (table_x + 10, y + 20))
+            y += ROW_HEIGHT
+        else:
+            for job in economy.job_market:
+                        row_rect = pygame.Rect(table_x, y, table_w, ROW_HEIGHT)
+                        self._add_hitbox(row_rect, "job", job)
+            
+                        if row_rect.collidepoint(mouse_pos):
+                            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, row_rect)
+            
+                        cost_color = COLOR_TEXT if economy.balance >= job.cost else COLOR_OVERHEAT
+                        values = [
+                            (job.name, COLOR_TEXT),
+                            (job.data_type, COLOR_TEXT),
+                            (f"{job.total_work:,.0f}", COLOR_TEXT),
+                            (f"${job.cost:,.0f}", cost_color),
+                        ]
+                        for (_, frac, align), (value, color) in zip(self.JOB_COLUMNS, values):
+                            self._blit_cell(self.font, value, color,
+                                            table_x + 10, table_w - 20, frac, align, y + 8)
+            
+                        pygame.draw.line(self.screen, COLOR_BORDER,
+                                         (table_x, row_rect.bottom), (table_x + table_w, row_rect.bottom), 1)
+                        y += ROW_HEIGHT
+        y += 30
+        title = self.font.render("--OWNED JOBS--", False, COLOR_TEXT)
+        self.screen.blit(title, (table_x, y))
+        y += 40
+        for job in economy.jobs:
+            status = "DECRYPTED" if job.is_decrypted else f"{job.remaining_work:,.0f} left"
+            line = self.font_small.render(f"{job.name}  ({job.data_type})  {status}", False, COLOR_TEXT_DIM)
+            self.screen.blit(line, (table_x + 10, y))
+            y += 26
+
+    def _blit_cell(self, font, text, color, table_x, table_w, frac, align, y):
+        surf = font.render(text, False, color)
+        x = table_x + int(table_w * frac)
+        if align == "right":
+            x -= surf.get_width()
+        self.screen.blit(surf, (x, y))
 
     def _draw_tab_bar(self, tabs, active_tab_key):
         pygame.draw.rect(self.screen, COLOR_PANEL, (0, 0, SCREEN_WIDTH, TAB_BAR_HEIGHT))

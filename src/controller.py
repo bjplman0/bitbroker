@@ -2,10 +2,11 @@ import pygame
 from settings import FPS, DEFAULT_STARTING_BALANCE
 from model import EconomyModel, Server
 from view import GameView
-from states import DashboardState
+from states import DashboardState, MarketplaceState
 
 TAB_KEYS = {
     pygame.K_F1: "dashboard",
+    pygame.K_F2: "marketplace",
 }
 
 class GameController:
@@ -17,6 +18,7 @@ class GameController:
 
         self.states = {
             "dashboard": DashboardState(),
+            "marketplace": MarketplaceState(),
         }
         self.active_tab_key = "dashboard"
 
@@ -70,10 +72,11 @@ class GameController:
         self.active_tab_key = new_tab_key
         self.states[self.active_tab_key].on_enter()
 
-    def _handle_mouse_click(self, pos):
+    def _handle_mouse_click(self, hit):
         for tab_key, rect in self.view.tab_rects.items():
-            if rect.collidepoint(pos):
+            if rect.collidepoint(hit):
                 self._switch_tab(tab_key)
                 return
 
-        self.states[self.active_tab_key].handle_click(pos, self.model)
+        hit = self.view.get_hit(hit)
+        self.states[self.active_tab_key].handle_click(hit, self.model)
