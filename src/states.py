@@ -33,6 +33,8 @@ class DashboardState(BaseState):
                 server_index = economy.servers.index(obj)
                 economy.assign_job_to_server(server_index, self.selected_job)
                 self.selected_job = None
+        elif kind == "server_sell":
+            economy.sell_server(obj)
         
     def on_exit(self):
         self.selected_job = None

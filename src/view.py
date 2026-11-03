@@ -266,13 +266,10 @@ class GameView:
             else:
                 pygame.draw.rect(self.screen, color, rect, 2, border_radius=CARD_RADIUS)
 
-            '''
-            pygame.draw.rect(self.screen, COLOR_PANEL_LIGHT, rect, border_radius=CARD_RADIUS)
-            pygame.draw.rect(self.screen, color, rect, 2, border_radius = CARD_RADIUS)
-            '''
             self._draw_server_header(server, rect, color)
             self._draw_temp_bar(server, rect, color)
             self._draw_progress_bar(server, rect)
+            self._draw_sell_button(server, rect, mouse_pos)
 
             y_offset += rack_height + rack_padding
 
@@ -316,6 +313,20 @@ class GameView:
             pct = 0.0
 
         self._draw_bar(bar_rect, pct, COLOR_TEXT)
+
+    def _draw_sell_button(self, server, rect, mouse_pos):
+        if server.state != ServerState.IDLE:
+            return
+
+        btn = pygame.Rect(rect.right - 95, rect.y + 100, 85, 30)
+        self._add_hitbox(btn, "server_sell", server)
+
+        if btn.collidepoint(mouse_pos):
+            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=4)
+        pygame.draw.rect(self.screen, COLOR_OVERHEAT, btn, 1, border_radius=4)
+
+        label = self.font_small.render(f"SELL ${server.sell_value():,.0f}", False, COLOR_OVERHEAT)
+        self.screen.blit(label, label.get_rect(center=btn.center))
 
     def _draw_bar(self, rect, pct, fill_color):
         pygame.draw.rect(self.screen, COLOR_PANEL, rect, border_radius=4)

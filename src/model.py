@@ -9,7 +9,8 @@ from settings import (
     JOB_POOL_MAX_SIZE,
     JOB_WORK_VARIANCE,
     JOB_COST_RATIO,
-    MAX_SERVERS
+    MAX_SERVERS,
+    SERVER_RESALE_RATIO
 )
 from name_generator import generate_name
 import random
@@ -83,7 +84,10 @@ class Server:
         self.current_job = job
         self.state = ServerState.WORKING
         print(f"[{self.name}] is now working on: {self.current_job.name}")
-        
+
+    def sell_value(self):
+        return self.capex * SERVER_RESALE_RATIO
+    
     def update(self, dt):
         finished_job = None
 
@@ -203,6 +207,20 @@ class EconomyModel:
         self.add_server(server)
         print(f"Bought {template['model']} as {server.name} for ${template['capex']:,.2f}. New balance: ${self.balance:,.2f}")
 
+    def sell_server(self, server):
+        if server not in self.servers:
+            print("Cannot sell server: not owned.")
+            return
+        
+        if server.state != ServerState.IDLE or server.current_job is not None:
+            print(f"Cannot sell {server.name}: it is busy.")
+            return
+
+        value = server.sell_value()
+        self.balance += value
+        self.servers.remove(server)
+        print(f"Sold {server.name} for ${value:,.2f}. New balance: ${self.balance:,.2f}")
+        
     def add_job(self, job):
         self.jobs.append(job)
 
