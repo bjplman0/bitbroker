@@ -9,6 +9,13 @@ class GameView:
         ("WORK",     0.70, "right"),
         ("COST",     0.85, "right"),
     ]
+    SHOP_COLUMNS = [
+        ("MODEL",    0.00, "left"),
+        ("SPEED",    0.45, "right"),
+        ("MAX TEMP", 0.58, "right"),
+        ("OPEX",     0.70, "right"),
+        ("COST",     0.85, "right"),
+    ]
     
     def __init__(self):
         pygame.init()
@@ -101,14 +108,50 @@ class GameView:
                                          (table_x, row_rect.bottom), (table_x + table_w, row_rect.bottom), 1)
                         y += ROW_HEIGHT
         y += 30
-        title = self.font.render("--OWNED JOBS--", False, COLOR_TEXT)
+        self._draw_server_shop(economy, mouse_pos, table_x, table_w, y)
+
+    def _draw_server_shop(self, economy, mouse_pos, table_x, table_w, y):
+        title = self.font.render("---SERVER SHOP---", False, COLOR_TEXT)
         self.screen.blit(title, (table_x, y))
-        y += 40
-        for job in economy.jobs:
-            status = "DECRYPTED" if job.is_decrypted else f"{job.remaining_work:,.0f} left"
-            line = self.font_small.render(f"{job.name}  ({job.data_type})  {status}", False, COLOR_TEXT_DIM)
-            self.screen.blit(line, (table_x + 10, y))
-            y += 26
+
+        count_surf = self.font.render(f"{len(economy.servers)}/{MAX_SERVERS}", False, COLOR_TEXT_DIM)
+        self.screen.blit(count_surf, (table_x + table_w - count_surf.get_width(), y))
+        y += 50
+
+        for text, frac, align in self.SHOP_COLUMNS:
+            self._blit_cell(self.font_small, text, COLOR_TEXT_DIM,
+                            table_x + 10, table_w - 20, frac, align, y)
+        y += 30
+        pygame.draw.line(self.screen, COLOR_BORDER, (table_x, y), (table_x + table_w, y), 2)
+        y += 4
+
+        park_full = len(economy.servers) >= MAX_SERVERS
+
+        for offer in SERVER_CATALOG:
+            row_rect = pygame.Rect(table_x, y, table_w, ROW_HEIGHT)
+            self._add_hitbox(row_rect, "server_offer", offer)
+
+            affordable = economy.balance >= offer["capex"]
+            if affordable and not park_full and row_rect.collidepoint(mouse_pos):
+                pygame.draw.rect(self.screen, COLOR_ROW_HOVER, row_rect)
+
+            text_color = COLOR_TEXT_DIM if park_full else COLOR_TEXT
+            cost_color = COLOR_TEXT if affordable else COLOR_OVERHEAT
+
+            values = [
+                (offer["model"], text_color),
+                (f"{offer['processing_speed']:g}", text_color),
+                (f"{offer['max_temperature']:g}C", text_color),
+                (f"${offer['opex']:,.0f}/s", text_color),
+                (f"${offer['capex']:,.0f}", cost_color),
+            ]
+            for (_, frac, align), (value, color) in zip(self.SHOP_COLUMNS, values):
+                self._blit_cell(self.font, value, color,
+                                table_x + 10, table_w - 20, frac, align, y + 8)
+
+            pygame.draw.line(self.screen, COLOR_BORDER,
+                             (table_x, row_rect.bottom), (table_x + table_w, row_rect.bottom), 1)
+            y += ROW_HEIGHT
 
     def _blit_cell(self, font, text, color, table_x, table_w, frac, align, y):
         surf = font.render(text, False, color)

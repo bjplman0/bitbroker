@@ -8,7 +8,8 @@ from settings import (
     JOB_GENERATION_INTERVAL,
     JOB_POOL_MAX_SIZE,
     JOB_WORK_VARIANCE,
-    JOB_COST_RATIO
+    JOB_COST_RATIO,
+    MAX_SERVERS
 )
 from name_generator import generate_name
 import random
@@ -176,9 +177,31 @@ class EconomyModel:
         self.market = Market()
         self.job_market = []
         self.job_generator = JobGenerator(self.market)
+        self._next_server_id = 1
 
     def add_server(self, server):
         self.servers.append(server)
+        self._next_server_id += 1
+
+    def buy_server(self, template):
+        if len(self.servers) >= MAX_SERVERS:
+            print(f"Cannot buy server: Maximum number of servers ({MAX_SERVERS}) reached.")
+            return
+        if self.balance < template["capex"]:
+            print(f"Cannot buy server: Insufficient balance (needs ${template['capex']:.2f}).")
+            return
+
+        self.balance -= template["capex"]
+        server = Server(
+            name = f"Server-{self._next_server_id:02d}",
+            capex = template["capex"],
+            opex = template["opex"],
+            processing_speed = template["processing_speed"],
+            max_temperature = template["max_temperature"],
+            idle_multiplier = template["idle_multiplier"]
+        )
+        self.add_server(server)
+        print(f"Bought {template['model']} as {server.name} for ${template['capex']:,.2f}. New balance: ${self.balance:,.2f}")
 
     def add_job(self, job):
         self.jobs.append(job)

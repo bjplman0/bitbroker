@@ -22,7 +22,7 @@ class GameController:
         }
         self.active_tab_key = "dashboard"
 
-        self._create_test_servers()
+        # self._create_test_servers()
 
     def _create_test_servers(self):
         server1 = Server(

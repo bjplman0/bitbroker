@@ -46,3 +46,5 @@ class MarketplaceState(BaseState):
         kind, obj = hit
         if kind == "job":
             economy.buy_job(obj)
+        elif kind == "server_offer":
+            economy.buy_server(obj)
