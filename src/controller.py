@@ -11,7 +11,6 @@ TAB_KEYS = {
 
 class GameController:
     def __init__(self):
-        self.model = EconomyModel(starting_balance=DEFAULT_STARTING_BALANCE)
         self.view = GameView()
         self.clock = pygame.time.Clock()
         self.running = True
@@ -20,9 +19,15 @@ class GameController:
             "dashboard": DashboardState(),
             "marketplace": MarketplaceState(),
         }
-        self.active_tab_key = "dashboard"
+        self._new_game()
 
         # self._create_test_servers()
+
+    def _new_game(self):
+        self.model = EconomyModel(starting_balance=DEFAULT_STARTING_BALANCE)
+        for state in self.states.values():
+            state.on_exit()
+        self.active_tab_key = "dashboard"
 
     def _create_test_servers(self):
         server1 = Server(
@@ -59,7 +64,10 @@ class GameController:
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key in TAB_KEYS:
+                if self.model.game_over:
+                    if event.key == pygame.K_r:
+                        self._new_game()
+                elif event.key in TAB_KEYS:
                     self._switch_tab(TAB_KEYS[event.key])
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 self._handle_mouse_click(event.pos)
@@ -73,6 +81,12 @@ class GameController:
         self.states[self.active_tab_key].on_enter()
 
     def _handle_mouse_click(self, pos):
+        if self.model.game_over:
+            hit = self.view.get_hit(pos)
+            if hit and hit[0] == "restart":
+                self._new_game()
+            return
+        
         for tab_key, rect in self.view.tab_rects.items():
             if rect.collidepoint(pos):
                 self._switch_tab(tab_key)

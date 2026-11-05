@@ -5,10 +5,11 @@ from model import ServerState
 class GameView:
     JOB_COLUMNS = [
         ("NAME",     0.00, "left"),
-        ("CATEGORY", 0.32, "left"),
-        ("WORK",     0.58, "right"),
-        ("COST",     0.74, "right"),
-        ("EXPIRES",  0.88, "right"),
+        ("CATEGORY", 0.28, "left"),
+        ("WORK",     0.50, "right"),
+        ("COST",     0.64, "right"),
+        ("PROFIT",   0.82, "right"),
+        ("EXPIRES",  0.97, "right"),
     ]
     SHOP_COLUMNS = [
         ("MODEL",    0.00, "left"),
@@ -40,6 +41,9 @@ class GameView:
 
         self.renderers[active_tab_key](economy, mouse_pos, states[active_tab_key])
 
+        if economy.game_over:
+            self._draw_game_over(economy, mouse_pos)
+            
         pygame.display.flip()
 
     def _add_hitbox(self, rect, kind, obj):
@@ -95,13 +99,20 @@ class GameView:
                             pygame.draw.rect(self.screen, COLOR_ROW_HOVER, row_rect)
             
                         cost_color = COLOR_TEXT if economy.balance >= job.cost else COLOR_OVERHEAT
+                        profit, pct = economy.expected_profit(job)
+                        profit_color = COLOR_TEXT if profit >= 0 else COLOR_OVERHEAT
+                        sign = "+" if profit >= 0 else "-"
+                        profit_str = f"{sign}${abs(profit):,.0f} ({sign}{abs(pct):.0f}%)"
+
                         values = [
                             (job.name, COLOR_TEXT),
                             (job.data_type, COLOR_TEXT),
                             (f"{job.total_work:,.0f}", COLOR_TEXT),
                             (f"${job.cost:,.0f}", cost_color),
-                            (f"{job.time_left:.0f}s", COLOR_OVERHEAT if job.time_left < 10 else COLOR_TEXT_DIM),
+                            (profit_str, profit_color),
+                            (f"{job.time_left:.0f}s",COLOR_OVERHEAT if job.time_left < 10 else COLOR_TEXT_DIM),
                         ]
+                        
                         for (_, frac, align), (value, color) in zip(self.JOB_COLUMNS, values):
                             self._blit_cell(self.font, value, color,
                                             table_x + 10, table_w - 20, frac, align, y + 8)
@@ -394,3 +405,41 @@ class GameView:
             self.screen.blit(info_surf, (rect.x + 8, rect.y + 28))
 
             y += OWNED_ROW_HEIGHT
+
+    def _draw_game_over(self, economy, mouse_pos):
+        self.hitboxes.clear()
+
+        w, h = self.screen.get_size()
+        shade = pygame.Surface((w, h), pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 200))
+        self.screen.blit(shade, (0, 0))
+
+        box = pygame.Rect(0, 0, 800, 420)
+        box.center = (w // 2, h // 2)
+        pygame.draw.rect(self.screen, COLOR_PANEL, box, border_radius=CARD_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_OVERHEAT, box, 3, border_radius=CARD_RADIUS)
+
+        minutes = int(economy.elapsed_time) // 60
+        seconds = int(economy.elapsed_time) % 60
+        lines = [
+            ("--BANKRUPT--", self.font, COLOR_OVERHEAT),
+            (economy.game_over_reason, self.font_small, COLOR_TEXT),
+            (f"Elapsed time: {minutes}m {seconds:02d}s", self.font, COLOR_TEXT),
+            (f"Final balance: ${economy.balance:,.2f}", self.font, COLOR_TEXT),
+        ]
+        y = box.y + 40
+        for text, font, color in lines:
+            surf = font.render(text, False, color)
+            self.screen.blit(surf, surf.get_rect(midtop=(box.centerx, y)))
+            y += surf.get_height() + 25
+
+        btn = pygame.Rect(0, 0, 300, 60)
+        btn.midbottom = (box.centerx, box.bottom - 40)
+        self._add_hitbox(btn, "restart", None)
+
+        if btn.collidepoint(mouse_pos):
+            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=CARD_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_TEXT, btn, 2, border_radius=CARD_RADIUS)
+
+        label = self.font.render("RESTART [R]", False, COLOR_TEXT)
+        self.screen.blit(label, label.get_rect(center=btn.center))

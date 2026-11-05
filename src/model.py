@@ -13,7 +13,8 @@ from settings import (
     JOB_COST_RATIO_MIN,
     JOB_COST_RATIO_MAX,
     JOB_LIFETIME_MIN,
-    JOB_LIFETIME_MAX
+    JOB_LIFETIME_MAX,
+    SERVER_CATALOG
 )
 from name_generator import generate_name
 import random
@@ -189,6 +190,9 @@ class EconomyModel:
         self.job_market = []
         self.job_generator = JobGenerator(self.market)
         self._next_server_id = 1
+        self.game_over = False
+        self.game_over_reason = ""
+        self.elapsed_time = 0.0
 
     def add_server(self, server):
         self.servers.append(server)
@@ -271,7 +275,32 @@ class EconomyModel:
         self.jobs.remove(job)
         print(f"Sold job: {job.name} for ${price:.2f}. New balance: ${self.balance:.2f}")
 
+    def expected_profit(self, job):
+        price = self.market.get_price(job.data_type)
+        profit = price - job.cost
+        pct = (profit / job.cost * 100.0) if job.cost > 0 else 0.0
+        return profit, pct
+
+    def _declare_game_over(self, reason):
+        self.game_over = True
+        self.game_over_reason = reason
+        print(f"GAME OVER: {reason}")
+
+    def _check_bankruptcy(self):
+        if self.balance < 0:
+            self._declare_game_over("Your balance fell below zero.")
+            return
+
+        cheapest_server = min(t["capex"] for t in SERVER_CATALOG)
+        has_sellable = any(job.is_decrypted for job in self.jobs)
+        if not self.servers and not has_sellable and self.balance < cheapest_server:
+            self._declare_game_over("You cannot afford a server and have nothing left to sell.")
+
     def update(self, dt):
+        if self.game_over:
+            return
+
+        self.elapsed_time += dt
         self.market.update(dt)
 
         for job in self.job_market:
@@ -293,5 +322,6 @@ class EconomyModel:
                 total_opex += (server.opex_per_sec * server.idle_multiplier) * dt
 
         self.balance -= total_opex
+        self._check_bankruptcy()
 
         
