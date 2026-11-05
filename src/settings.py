@@ -34,6 +34,14 @@ SERVER_HEATING_RATE = 0.1
 SERVER_COOLING_RATE = 0.2
 SERVER_RESALE_RATIO = 0.6
 
+JOB_GENERATION_INTERVAL = 4.0 #seconds for each try
+JOB_POOL_MAX_SIZE = 6
+JOB_WORK_VARIANCE = 0.3 #+- 30% of base work time
+JOB_COST_RATIO_MIN = 0.55
+JOB_COST_RATIO_MAX = 0.95
+JOB_LIFETIME_MIN = 25.0
+JOB_LIFETIME_MAX = 60.0
+
 SERVER_CATALOG = [
     {
         "model": "Basic Rack",
@@ -107,7 +115,4 @@ MARKET_CATEGORIES_CONFIG = {
     }
 }
 
-JOB_GENERATION_INTERVAL = 4.0 #tries per second
-JOB_POOL_MAX_SIZE = 6
-JOB_WORK_VARIANCE = 0.3 #+- 30% of base work time
-JOB_COST_RATIO = 0.5 #job price percentage of actual market value
+

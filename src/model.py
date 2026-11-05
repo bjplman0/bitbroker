@@ -8,22 +8,26 @@ from settings import (
     JOB_GENERATION_INTERVAL,
     JOB_POOL_MAX_SIZE,
     JOB_WORK_VARIANCE,
-    JOB_COST_RATIO,
     MAX_SERVERS,
-    SERVER_RESALE_RATIO
+    SERVER_RESALE_RATIO,
+    JOB_COST_RATIO_MIN,
+    JOB_COST_RATIO_MAX,
+    JOB_LIFETIME_MIN,
+    JOB_LIFETIME_MAX
 )
 from name_generator import generate_name
 import random
 from enum import Enum
 
 class Job:
-    def __init__(self, name, total_work, data_type, cost = 0.0):
+    def __init__(self, name, total_work, data_type, cost = 0.0, lifetime = 0.0):
         self.name = name
         self.total_work = total_work
         self.remaining_work = total_work
         self.data_type = data_type
         self.cost = cost
         self.is_decrypted = False
+        self.time_left = lifetime
 
 class JobGenerator:
     def __init__(self, market):
@@ -49,11 +53,14 @@ class JobGenerator:
 
         variance = random.uniform(1.0 - JOB_WORK_VARIANCE, 1.0 + JOB_WORK_VARIANCE)
         total_work = round(config["job_work_base"] * variance, 1)
-        cost = round(category.current_price * JOB_COST_RATIO, 2)
 
+        cost_ratio = random.uniform(JOB_COST_RATIO_MIN, JOB_COST_RATIO_MAX)
+        cost = round(category.current_price * cost_ratio, 2)
+
+        lifetime = random.uniform(JOB_LIFETIME_MIN, JOB_LIFETIME_MAX)
         name = generate_name(category_name)
 
-        return Job(name=name, total_work=total_work, data_type=category_name, cost=cost)
+        return Job(name=name, total_work=total_work, data_type=category_name, cost=cost, lifetime=lifetime)
 
 class ServerState(Enum):
     IDLE = "IDLE"
@@ -267,6 +274,9 @@ class EconomyModel:
     def update(self, dt):
         self.market.update(dt)
 
+        for job in self.job_market:
+            job.time_left -= dt
+        self.job_market = [job for job in self.job_market if job.time_left > 0]
         new_job = self.job_generator.update(dt, len(self.job_market))
         if new_job is not None:
             self.job_market.append(new_job)

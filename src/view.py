@@ -5,9 +5,10 @@ from model import ServerState
 class GameView:
     JOB_COLUMNS = [
         ("NAME",     0.00, "left"),
-        ("CATEGORY", 0.40, "left"),
-        ("WORK",     0.70, "right"),
-        ("COST",     0.85, "right"),
+        ("CATEGORY", 0.32, "left"),
+        ("WORK",     0.58, "right"),
+        ("COST",     0.74, "right"),
+        ("EXPIRES",  0.88, "right"),
     ]
     SHOP_COLUMNS = [
         ("MODEL",    0.00, "left"),
@@ -99,6 +100,7 @@ class GameView:
                             (job.data_type, COLOR_TEXT),
                             (f"{job.total_work:,.0f}", COLOR_TEXT),
                             (f"${job.cost:,.0f}", cost_color),
+                            (f"{job.time_left:.0f}s", COLOR_OVERHEAT if job.time_left < 10 else COLOR_TEXT_DIM),
                         ]
                         for (_, frac, align), (value, color) in zip(self.JOB_COLUMNS, values):
                             self._blit_cell(self.font, value, color,
