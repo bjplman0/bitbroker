@@ -10,6 +10,8 @@ from settings import (
     JOB_WORK_VARIANCE,
     MAX_SERVERS,
     SERVER_RESALE_RATIO,
+    SERVER_LIFETIME,
+    SERVER_SALVAGE_RATIO,
     JOB_COST_RATIO_MIN,
     JOB_COST_RATIO_MAX,
     JOB_LIFETIME_MIN,
@@ -84,6 +86,7 @@ class Server:
         self.state = ServerState.IDLE
         self.temperature = SERVER_BASE_TEMP
         self.current_job = None
+        self.age = 0.0
 
     def start_job(self, job):
         if self.state != ServerState.IDLE:
@@ -99,11 +102,26 @@ class Server:
     def unload_job(self):
         job = self.current_job
         self.current_job = None
-        self.state = ServerState.IDLE
+
+        if self.state != ServerState.OVERHEATED:
+            self.state = ServerState.IDLE
+
         return job
 
+    def book_value(self):
+        salvage = self.capex * SERVER_SALVAGE_RATIO
+        used = min(self.age / SERVER_LIFETIME, 1.0)
+        return self.capex - (self.capex - salvage) * used
+
+    def depreciate(self, dt):
+        salvage = self.capex * SERVER_SALVAGE_RATIO
+        remaining = max(SERVER_LIFETIME - self.age, 0.0)
+        step = min(dt, remaining)
+        self.age += dt
+        return (self.capex - salvage) / SERVER_LIFETIME * step
+
     def sell_value(self):
-        return self.capex * SERVER_RESALE_RATIO
+        return self.book_value() * SERVER_RESALE_RATIO
     
     def update(self, dt):
         finished_job = None
@@ -203,10 +221,14 @@ class EconomyModel:
         self.game_over_reason = ""
         self.elapsed_time = 0.0
         self.ledger = deque(maxlen=LEDGER_MAX_ENTRIES)
+        self.starting_balance = starting_balance
         self.totals = {
             "job_sales": 0.0, "job_purchases": 0.0, 
             "server_sales": 0.0, "server_purchases": 0.0, 
             "opex": 0.0,
+            "cogs": 0.0,
+            "depreciation": 0.0,
+            "server_disposal_result": 0.0,
         }
         self.balance_history = deque(maxlen=BALANCE_HISTORY_LENGTH)
         self.balance_history.append((0.0, starting_balance))
@@ -248,6 +270,7 @@ class EconomyModel:
         value = server.sell_value()
         self.balance += value
         self._record("server_sales", value, server.name)
+        self.totals["server_disposal_result"] += value - server.book_value()
         self.servers.remove(server)
         
     def add_job(self, job):
@@ -297,6 +320,7 @@ class EconomyModel:
         price = self.market.get_price(job.data_type)
         self.balance += price
         self._record("job_sales", price, job.name)
+        self.totals["cogs"] += job.cost
         self.jobs.remove(job)
 
     def expected_profit(self, job):
@@ -350,6 +374,55 @@ class EconomyModel:
         if not self.servers and not has_sellable and self.balance < cheapest_server:
             self._declare_game_over("You cannot afford a server and have nothing left to sell.")
 
+    def income_statement(self):
+        t = self.totals
+        revenue = t["job_sales"]
+        gross_profit = revenue - t["cogs"]
+        operating_result = gross_profit - t["opex"] - t["depreciation"]
+        return {
+            "revenue": revenue,
+            "cogs": t["cogs"],
+            "gross_profit": gross_profit,
+            "opex": t["opex"],
+            "depreciation": t["depreciation"],
+            "operating_result": operating_result,
+            "disposal_result": t["server_disposal_result"],
+            "net_result": operating_result + t["server_disposal_result"],
+            "operating_margin": operating_result / revenue * 100.0 if revenue > 0 else None,
+        }
+
+    def cashflow_statement(self):
+        t = self.totals
+        operating = t["job_sales"] - t["job_purchases"] - t["opex"]
+        investing = t["server_sales"] - t["server_purchases"]
+        return {
+            "job_sales": t["job_sales"],
+            "job_purchases": t["job_purchases"],
+            "opex": t["opex"],
+            "operating": operating,
+            "server_sales": t["server_sales"],
+            "server_purchases": t["server_purchases"],
+            "investing": investing,
+            "net_change": operating + investing,
+        }
+
+    def asset_position(self):
+        inventory = sum(job.cost for job in self.jobs)
+        servers = sum(s.book_value() for s in self.servers)
+        return {
+            "cash": self.balance,
+            "inventory_at_cost": inventory,
+            "servers_at_book": servers,
+            "total_assets": self.balance + inventory + servers,
+        }
+
+    def cash_reconciliation_error(self):
+        return self.balance - (self.starting_balance + self.cashflow_statement()["net_change"])
+
+    def equity_reconciliation_error(self):
+        expected = self.starting_balance + self.income_statement()["net_result"]
+        return self.asset_position()["total_assets"] - expected
+
     def update(self, dt):
         if self.game_over:
             return
@@ -365,18 +438,19 @@ class EconomyModel:
             self.job_market.append(new_job)
 
         total_opex = 0.0
+        total_depreciation = 0.0
 
         for server in self.servers:
-            finished_job = server.update(dt)
-            if finished_job is not None:
-                pass
-            if server.state in [ServerState.WORKING, ServerState.OVERHEATED]:
+            server.update(dt)
+            total_depreciation += server.depreciate(dt)
+            if server.state in (ServerState.WORKING, ServerState.OVERHEATED):
                 total_opex += server.opex_per_sec * dt
             else:
-                total_opex += (server.opex_per_sec * server.idle_multiplier) * dt
+                total_opex += server.opex_per_sec * server.idle_multiplier * dt
 
         self.balance -= total_opex
         self.totals["opex"] += total_opex
+        self.totals["depreciation"] += total_depreciation
 
         self._time_since_sample += dt
         if self._time_since_sample >= BALANCE_SAMPLE_INTERVAL:

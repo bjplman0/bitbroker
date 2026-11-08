@@ -463,9 +463,9 @@ class GameView:
         label = self.font.render("RESTART [R]", False, COLOR_TEXT)
         self.screen.blit(label, label.get_rect(center=btn.center))
 
-    def _signed_money(self, value):
+    def _signed_money(self, value, decimals=0):
         sign = "+" if value >= 0 else "-"
-        return f"{sign}${abs(value):,.0f}"
+        return f"{sign}${abs(value):,.{decimals}f}"
 
     def _draw_financial(self, economy, mouse_pos, state):
         w = self.screen.get_width()
@@ -491,10 +491,10 @@ class GameView:
             ("BALANCE", f"${economy.balance:,.0f}",
              COLOR_TEXT if economy.balance >= 0 else COLOR_OVERHEAT),
             ("OPEX / SEC", f"${economy.current_opex_per_sec():,.2f}", COLOR_TEXT),
-            ("CASH-FLOW / MIN", self._signed_money(cashflow),
+            ("NET CASH CHANGE / MIN (60s)", self._signed_money(cashflow),
              COLOR_TEXT if cashflow >= 0 else COLOR_OVERHEAT),
-            ("RUNWAY", runway_str, runway_color),
-            ("ACTIVE SERVERS", f"{economy.active_server_count()}/{len(economy.servers)}", COLOR_TEXT),
+            ("RUNWAY (AT CURRENT OPEX)", runway_str, runway_color),
+            ("PROCESSING SERVERS", f"{economy.active_server_count()}/{len(economy.servers)}", COLOR_TEXT),
         ]
         card_w = (full_w - gap * (len(kpis) - 1)) // len(kpis)
         card_h = 100
@@ -503,14 +503,13 @@ class GameView:
             self._draw_kpi_card(rect, label, value, color)
         y += card_h + 30
 
-        chart_h = 280
+        chart_h = 250
         self._draw_balance_chart(economy.balance_history, pygame.Rect(x0, y, full_w, chart_h))
         y += chart_h + 30
 
         half_w = (full_w - gap) // 2
-        self._draw_statement("INCOME STATEMENT", self._income_rows(economy), x0, y, half_w)
-        self._draw_statement("CASH-FLOW STATEMENT", self._cashflow_rows(economy),
-                             x0 + half_w + gap, y, half_w)
+        self._draw_statement("INCOME STATEMENT (SINCE START)", self._income_rows(economy), x0, y, half_w)
+        self._draw_statement("CASH-FLOW STATEMENT (SINCE START)", self._cashflow_rows(economy), x0 + half_w + gap, y, half_w)
 
     def _draw_kpi_card(self, rect, label, value, color):
         pygame.draw.rect(self.screen, COLOR_PANEL_LIGHT, rect, border_radius=CARD_RADIUS)
@@ -564,34 +563,36 @@ class GameView:
         self.screen.blit(span_lbl, (rect.right - span_lbl.get_width() - 15, rect.y + 10))
 
     def _income_rows(self, economy):
-        t = economy.totals
-        gross = t["job_sales"] - t["job_purchases"]
-        result = gross - t["opex"]
-        margin = result / t["job_sales"] * 100.0 if t["job_sales"] > 0 else 0.0
+        s = economy.income_statement()
+        p = economy.asset_position()
+        margin = "N/A" if s["operating_margin"] is None else f"{s['operating_margin']:.1f}%"
         return [
-            ("Job sales revenue", t["job_sales"], "item"),
-            ("Cost of jobs purchased", -t["job_purchases"], "item"),
-            ("Gross margin", gross, "total"),
-            ("Operating expenses (OPEX)", -t["opex"], "item"),
-            ("Operating result", result, "total"),
-            (f"Operating margin: {margin:.0f}%", None, "header"),
+            ("Revenue (job sales)", s["revenue"], "item"),
+            ("Cost of jobs sold", -s["cogs"], "item"),
+            ("Gross profit", s["gross_profit"], "total"),
+            ("Operating expenses (OPEX)", -s["opex"], "item"),
+            ("Depreciation (servers)", -s["depreciation"], "item"),
+            ("Operating result", s["operating_result"], "total"),
+            ("Result on server disposal", s["disposal_result"], "item"),
+            ("Net result", s["net_result"], "total"),
+            (f"Operating margin: {margin}", None, "header"),
+            ("Unsold jobs held (at cost)", p["inventory_at_cost"], "note"),
+            ("Servers (book value)", p["servers_at_book"], "note"),
         ]
 
     def _cashflow_rows(self, economy):
-        t = economy.totals
-        operating = t["job_sales"] - t["job_purchases"] - t["opex"]
-        investing = t["server_sales"] - t["server_purchases"]
+        c = economy.cashflow_statement()
         return [
             ("OPERATING ACTIVITIES", None, "header"),
-            ("Job sales", t["job_sales"], "item"),
-            ("Job purchases", -t["job_purchases"], "item"),
-            ("OPEX paid", -t["opex"], "item"),
-            ("Operating cash-flow", operating, "total"),
+            ("Job sales", c["job_sales"], "item"),
+            ("Job purchases", -c["job_purchases"], "item"),
+            ("OPEX paid", -c["opex"], "item"),
+            ("Operating cash-flow", c["operating"], "total"),
             ("INVESTING ACTIVITIES", None, "header"),
-            ("Server sales", t["server_sales"], "item"),
-            ("Server purchases", -t["server_purchases"], "item"),
-            ("Investing cash-flow", investing, "total"),
-            ("Net cash change", operating + investing, "total"),
+            ("Server sales", c["server_sales"], "item"),
+            ("Server purchases", -c["server_purchases"], "item"),
+            ("Investing cash-flow", c["investing"], "total"),
+            ("Net cash change", c["net_change"], "total"),
         ]
 
     def _draw_statement(self, title, rows, x, y, w):
@@ -610,7 +611,11 @@ class GameView:
             self.screen.blit(label_surf, (x + 10, y))
 
             if value is not None:
-                value_color = COLOR_TEXT if value >= 0 else COLOR_OVERHEAT
-                value_surf = self.font.render(self._signed_money(value), False, value_color)
+                if style == "note":
+                    text, color = f"${value:,.0f}", COLOR_TEXT_DIM
+                else:
+                    text = self._signed_money(value, decimals=2)
+                    color = COLOR_TEXT if value >= 0 else COLOR_OVERHEAT
+                value_surf = self.font.render(text, False, color)
                 self.screen.blit(value_surf, (x + w - value_surf.get_width() - 10, y))
             y += 34
