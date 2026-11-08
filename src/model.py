@@ -14,11 +14,15 @@ from settings import (
     JOB_COST_RATIO_MAX,
     JOB_LIFETIME_MIN,
     JOB_LIFETIME_MAX,
-    SERVER_CATALOG
+    SERVER_CATALOG,
+    BALANCE_SAMPLE_INTERVAL,
+    BALANCE_HISTORY_LENGTH,
+    LEDGER_MAX_ENTRIES
 )
 from name_generator import generate_name
 import random
 from enum import Enum
+from collections import deque
 
 class Job:
     def __init__(self, name, total_work, data_type, cost = 0.0, lifetime = 0.0):
@@ -91,7 +95,12 @@ class Server:
         
         self.current_job = job
         self.state = ServerState.WORKING
-        print(f"[{self.name}] is now working on: {self.current_job.name}")
+
+    def unload_job(self):
+        job = self.current_job
+        self.current_job = None
+        self.state = ServerState.IDLE
+        return job
 
     def sell_value(self):
         return self.capex * SERVER_RESALE_RATIO
@@ -193,6 +202,15 @@ class EconomyModel:
         self.game_over = False
         self.game_over_reason = ""
         self.elapsed_time = 0.0
+        self.ledger = deque(maxlen=LEDGER_MAX_ENTRIES)
+        self.totals = {
+            "job_sales": 0.0, "job_purchases": 0.0, 
+            "server_sales": 0.0, "server_purchases": 0.0, 
+            "opex": 0.0,
+        }
+        self.balance_history = deque(maxlen=BALANCE_HISTORY_LENGTH)
+        self.balance_history.append((0.0, starting_balance))
+        self._time_since_sample = 0.0
 
     def add_server(self, server):
         self.servers.append(server)
@@ -207,6 +225,7 @@ class EconomyModel:
             return
 
         self.balance -= template["capex"]
+        self._record("server_purchases", -template["capex"], template["model"])
         server = Server(
             name = f"Server-{self._next_server_id:02d}",
             capex = template["capex"],
@@ -216,7 +235,6 @@ class EconomyModel:
             idle_multiplier = template["idle_multiplier"]
         )
         self.add_server(server)
-        print(f"Bought {template['model']} as {server.name} for ${template['capex']:,.2f}. New balance: ${self.balance:,.2f}")
 
     def sell_server(self, server):
         if server not in self.servers:
@@ -229,8 +247,8 @@ class EconomyModel:
 
         value = server.sell_value()
         self.balance += value
+        self._record("server_sales", value, server.name)
         self.servers.remove(server)
-        print(f"Sold {server.name} for ${value:,.2f}. New balance: ${self.balance:,.2f}")
         
     def add_job(self, job):
         self.jobs.append(job)
@@ -244,9 +262,9 @@ class EconomyModel:
             return
 
         self.balance -= job.cost
+        self._record("job_purchases", -job.cost, job.name)
         self.job_market.remove(job)
         self.add_job(job)
-        print(f"Bought job: {job.name} for ${job.cost:.2f}. New balance: ${self.balance:.2f}")
 
     def assign_job_to_server(self, server_index, job):
         if job not in self.jobs:
@@ -258,6 +276,12 @@ class EconomyModel:
         
         server = self.servers[server_index]
         server.start_job(job)
+
+    def unload_server(self, server):
+        if server not in self.servers or server.current_job is None:
+            print("Nothing to unload.")
+            return
+        job = server.unload_job()
 
     def is_job_running(self, job):
         return any(server.current_job is job for server in self.servers)
@@ -272,14 +296,44 @@ class EconomyModel:
 
         price = self.market.get_price(job.data_type)
         self.balance += price
+        self._record("job_sales", price, job.name)
         self.jobs.remove(job)
-        print(f"Sold job: {job.name} for ${price:.2f}. New balance: ${self.balance:.2f}")
 
     def expected_profit(self, job):
         price = self.market.get_price(job.data_type)
         profit = price - job.cost
         pct = (profit / job.cost * 100.0) if job.cost > 0 else 0.0
         return profit, pct
+
+    def _record(self, kind, signed_amount, label):
+        self.ledger.append((self.elapsed_time, kind, signed_amount, label))
+        self.totals[kind] += abs(signed_amount)
+
+    def current_opex_per_sec(self):
+        total = 0.0
+        for s in self.servers:
+            active = s.state in (ServerState.WORKING, ServerState.OVERHEATED)
+            total += s.opex_per_sec * (1.0 if active else s.idle_multiplier)
+        return total
+
+    def runway_seconds(self):
+        opex = self.current_opex_per_sec()
+        return self.balance / opex if opex > 0 else None
+
+    def cashflow_per_minute(self, window=60.0):
+        if len(self.balance_history) < 2:
+            return 0.0
+        t_now, b_now = self.balance_history[-1]
+        t_ref, b_ref = self.balance_history[0]
+        for t, b in self.balance_history:
+            if t_now - t <= window:
+                t_ref, b_ref = t, b
+                break
+        span = t_now - t_ref
+        return (b_now - b_ref) / span * 60.0 if span > 0 else 0.0
+
+    def active_server_count(self):
+        return sum(1 for s in self.servers if s.state == ServerState.WORKING)
 
     def _declare_game_over(self, reason):
         self.game_over = True
@@ -322,6 +376,13 @@ class EconomyModel:
                 total_opex += (server.opex_per_sec * server.idle_multiplier) * dt
 
         self.balance -= total_opex
+        self.totals["opex"] += total_opex
+
+        self._time_since_sample += dt
+        if self._time_since_sample >= BALANCE_SAMPLE_INTERVAL:
+            self._time_since_sample -= BALANCE_SAMPLE_INTERVAL
+            self.balance_history.append((self.elapsed_time, self.balance))
+
         self._check_bankruptcy()
 
         

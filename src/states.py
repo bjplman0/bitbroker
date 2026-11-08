@@ -35,6 +35,8 @@ class DashboardState(BaseState):
                 self.selected_job = None
         elif kind == "server_sell":
             economy.sell_server(obj)
+        elif kind == "server_unload":
+            economy.unload_server(obj)
         
     def on_exit(self):
         self.selected_job = None
@@ -50,3 +52,6 @@ class MarketplaceState(BaseState):
             economy.buy_job(obj)
         elif kind == "server_offer":
             economy.buy_server(obj)
+
+class FinancialState(BaseState):
+    label = "Financial"

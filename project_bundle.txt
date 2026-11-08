@@ -1,0 +1,1205 @@
+
+=== FILE: ./src/controller.py ===
+
+import pygame
+from settings import FPS, DEFAULT_STARTING_BALANCE
+from model import EconomyModel, Server
+from view import GameView
+from states import DashboardState, MarketplaceState
+
+TAB_KEYS = {
+    pygame.K_F1: "dashboard",
+    pygame.K_F2: "marketplace",
+}
+
+class GameController:
+    def __init__(self):
+        self.view = GameView()
+        self.clock = pygame.time.Clock()
+        self.running = True
+
+        self.states = {
+            "dashboard": DashboardState(),
+            "marketplace": MarketplaceState(),
+        }
+        self._new_game()
+
+        # self._create_test_servers()
+
+    def _new_game(self):
+        self.model = EconomyModel(starting_balance=DEFAULT_STARTING_BALANCE)
+        for state in self.states.values():
+            state.on_exit()
+        self.active_tab_key = "dashboard"
+
+    def _create_test_servers(self):
+        server1 = Server(
+            name="Server-01",
+            capex=1000.0,
+            opex=15.0,
+            processing_speed=50.0,
+            max_temperature=95.0,
+            idle_multiplier=0.2
+        )
+        self.model.add_server(server1)
+
+        server2 = Server(
+            name="Server-02",
+            capex=1500.0,
+            opex=22.0,
+            processing_speed=75.0,
+            max_temperature=90.0,
+            idle_multiplier=0.25
+        )
+        self.model.add_server(server2)
+
+    def run(self):
+        while self.running:
+            dt = self.clock.tick(FPS) / 1000.0
+            self.handle_events()
+            self.model.update(dt)
+            mouse_pos = pygame.mouse.get_pos()
+            self.view.draw(self.model, self.states, self.active_tab_key, mouse_pos)
+        pygame.quit()
+
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            elif event.type == pygame.KEYDOWN:
+                if self.model.game_over:
+                    if event.key == pygame.K_r:
+                        self._new_game()
+                elif event.key in TAB_KEYS:
+                    self._switch_tab(TAB_KEYS[event.key])
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                self._handle_mouse_click(event.pos)
+
+    def _switch_tab(self, new_tab_key):
+        if new_tab_key == self.active_tab_key:
+            return
+
+        self.states[self.active_tab_key].on_exit()
+        self.active_tab_key = new_tab_key
+        self.states[self.active_tab_key].on_enter()
+
+    def _handle_mouse_click(self, pos):
+        if self.model.game_over:
+            hit = self.view.get_hit(pos)
+            if hit and hit[0] == "restart":
+                self._new_game()
+            return
+        
+        for tab_key, rect in self.view.tab_rects.items():
+            if rect.collidepoint(pos):
+                self._switch_tab(tab_key)
+                return
+
+        hit = self.view.get_hit(pos)
+        self.states[self.active_tab_key].handle_click(hit, self.model)
+=== END: ./src/controller.py ===
+
+
+=== FILE: ./src/main.py ===
+
+import sys
+from controller import GameController
+
+if __name__ == "__main__":
+    app = GameController()
+    app.run()
+    sys.exit()
+=== END: ./src/main.py ===
+
+
+=== FILE: ./src/model.py ===
+
+from settings import (
+    SERVER_BASE_TEMP,
+    SERVER_HEATING_RATE,
+    SERVER_COOLING_RATE,
+    MARKET_TICK_RATE,
+    MARKET_CATEGORIES_CONFIG,
+    MARKET_HISTORY_LENGTH,
+    JOB_GENERATION_INTERVAL,
+    JOB_POOL_MAX_SIZE,
+    JOB_WORK_VARIANCE,
+    MAX_SERVERS,
+    SERVER_RESALE_RATIO,
+    JOB_COST_RATIO_MIN,
+    JOB_COST_RATIO_MAX,
+    JOB_LIFETIME_MIN,
+    JOB_LIFETIME_MAX,
+    SERVER_CATALOG
+)
+from name_generator import generate_name
+import random
+from enum import Enum
+
+class Job:
+    def __init__(self, name, total_work, data_type, cost = 0.0, lifetime = 0.0):
+        self.name = name
+        self.total_work = total_work
+        self.remaining_work = total_work
+        self.data_type = data_type
+        self.cost = cost
+        self.is_decrypted = False
+        self.time_left = lifetime
+
+class JobGenerator:
+    def __init__(self, market):
+        self.market = market
+        self.time_since_last_spawn = 0.0
+        self.spawn_interval = JOB_GENERATION_INTERVAL
+        self.pool_max_size = JOB_POOL_MAX_SIZE
+
+    def update(self, dt, current_pool_size):
+        self.time_since_last_spawn += dt
+
+        if self.time_since_last_spawn > self.spawn_interval:
+            self.time_since_last_spawn = 0.0
+            if current_pool_size < self.pool_max_size:
+                return self._generate_job()
+
+        return None
+
+    def _generate_job(self):
+        category_name = random.choice(list(self.market.categories.keys()))
+        category = self.market.categories[category_name]
+        config = MARKET_CATEGORIES_CONFIG[category_name]
+
+        variance = random.uniform(1.0 - JOB_WORK_VARIANCE, 1.0 + JOB_WORK_VARIANCE)
+        total_work = round(config["job_work_base"] * variance, 1)
+
+        cost_ratio = random.uniform(JOB_COST_RATIO_MIN, JOB_COST_RATIO_MAX)
+        cost = round(category.current_price * cost_ratio, 2)
+
+        lifetime = random.uniform(JOB_LIFETIME_MIN, JOB_LIFETIME_MAX)
+        name = generate_name(category_name)
+
+        return Job(name=name, total_work=total_work, data_type=category_name, cost=cost, lifetime=lifetime)
+
+class ServerState(Enum):
+    IDLE = "IDLE"
+    WORKING = "WORKING"
+    OVERHEATED = "OVERHEATED"
+
+class Server:
+    def __init__(self, name, capex, opex, processing_speed, max_temperature, idle_multiplier):
+        self.name = name
+        self.capex = capex
+        self.opex_per_sec = opex
+        self.processing_speed = processing_speed
+        self.max_temperature = max_temperature
+        self.idle_multiplier = idle_multiplier
+
+        self.state = ServerState.IDLE
+        self.temperature = SERVER_BASE_TEMP
+        self.current_job = None
+
+    def start_job(self, job):
+        if self.state != ServerState.IDLE:
+            print(f"[{self.name}] cannot start job. Server is currently {self.state.name}.")
+            return
+        if job.is_decrypted:
+            print(f"[{self.name}] cannot start job: {job.name} is already decrypted.")
+            return
+        
+        self.current_job = job
+        self.state = ServerState.WORKING
+        print(f"[{self.name}] is now working on: {self.current_job.name}")
+
+    def sell_value(self):
+        return self.capex * SERVER_RESALE_RATIO
+    
+    def update(self, dt):
+        finished_job = None
+
+        if self.state == ServerState.WORKING:
+            self.temperature += SERVER_HEATING_RATE * dt
+            self.current_job.remaining_work -= self.processing_speed * dt
+            if self.current_job.remaining_work <= 0:
+                self.current_job.remaining_work = 0
+                self.current_job.is_decrypted = True
+                finished_job = self.current_job
+                self.current_job = None
+                self.state = ServerState.IDLE
+            elif self.temperature > self.max_temperature:
+                self.state = ServerState.OVERHEATED
+
+        elif self.state == ServerState.OVERHEATED:
+            self.temperature -= SERVER_COOLING_RATE * dt
+            if self.temperature < SERVER_BASE_TEMP:
+                self.temperature = SERVER_BASE_TEMP
+                if self.current_job is not None:
+                    self.state = ServerState.WORKING
+                else:
+                    self.state = ServerState.IDLE
+
+        elif self.state == ServerState.IDLE:
+            if self.temperature > SERVER_BASE_TEMP:
+                self.temperature -= SERVER_COOLING_RATE * dt
+                if self.temperature < SERVER_BASE_TEMP:
+                    self.temperature = SERVER_BASE_TEMP
+
+        return finished_job
+
+class DataCategory:
+    def __init__(self, name, base_price, volatility, gravity, min_price, max_price):
+        self.name = name
+        self.base_price = base_price
+        self.current_price = base_price
+        self.volatility = volatility
+        self.gravity = gravity
+        self.min_price = min_price
+        self.max_price = max_price
+        self.history_length = MARKET_HISTORY_LENGTH
+        self.price_history = [base_price] * self.history_length
+
+    def update_price(self):
+        fluctuation = random.uniform(-self.volatility, self.volatility) * self.base_price
+        distance = self.base_price - self.current_price
+        pull = distance * self.gravity
+        self.current_price += fluctuation + pull
+
+        self.current_price = max(self.min_price, min(self.current_price, self.max_price))
+
+        self.price_history.append(self.current_price)
+        if len(self.price_history) > self.history_length:
+            self.price_history.pop(0)
+
+class Market:
+    def __init__(self):
+        self.categories = {}
+        for name, data in MARKET_CATEGORIES_CONFIG.items():
+            self.categories[name] = DataCategory(
+                name = name,
+                base_price = data["base_price"],
+                volatility = data["volatility"],
+                gravity = data["gravity"],
+                min_price = data["min_price"],
+                max_price = data["max_price"]
+            )
+
+        self.time_since_last_tick = 0.0
+        self.tick_rate = MARKET_TICK_RATE
+
+    def update(self, dt):
+        self.time_since_last_tick += dt
+
+        if self.time_since_last_tick > self.tick_rate:
+            self.time_since_last_tick = 0.0
+            for category in self.categories.values():
+                category.update_price()
+
+    def get_price(self, data_type):
+        if data_type in self.categories:
+            return self.categories[data_type].current_price
+        return 0.0
+    
+class EconomyModel:
+    def __init__(self, starting_balance):
+        self.balance = starting_balance
+        self.servers = []
+        self.jobs = []
+        self.market = Market()
+        self.job_market = []
+        self.job_generator = JobGenerator(self.market)
+        self._next_server_id = 1
+        self.game_over = False
+        self.game_over_reason = ""
+        self.elapsed_time = 0.0
+
+    def add_server(self, server):
+        self.servers.append(server)
+        self._next_server_id += 1
+
+    def buy_server(self, template):
+        if len(self.servers) >= MAX_SERVERS:
+            print(f"Cannot buy server: Maximum number of servers ({MAX_SERVERS}) reached.")
+            return
+        if self.balance < template["capex"]:
+            print(f"Cannot buy server: Insufficient balance (needs ${template['capex']:.2f}).")
+            return
+
+        self.balance -= template["capex"]
+        server = Server(
+            name = f"Server-{self._next_server_id:02d}",
+            capex = template["capex"],
+            opex = template["opex"],
+            processing_speed = template["processing_speed"],
+            max_temperature = template["max_temperature"],
+            idle_multiplier = template["idle_multiplier"]
+        )
+        self.add_server(server)
+        print(f"Bought {template['model']} as {server.name} for ${template['capex']:,.2f}. New balance: ${self.balance:,.2f}")
+
+    def sell_server(self, server):
+        if server not in self.servers:
+            print("Cannot sell server: not owned.")
+            return
+        
+        if server.state != ServerState.IDLE or server.current_job is not None:
+            print(f"Cannot sell {server.name}: it is busy.")
+            return
+
+        value = server.sell_value()
+        self.balance += value
+        self.servers.remove(server)
+        print(f"Sold {server.name} for ${value:,.2f}. New balance: ${self.balance:,.2f}")
+        
+    def add_job(self, job):
+        self.jobs.append(job)
+
+    def buy_job(self, job):
+        if job not in self.job_market:
+            print(f"Cannot buy job: {job.name} is not available in the job market.")
+            return
+        if self.balance < job.cost:
+            print(f"Cannot buy job: {job.name}. Insufficient balance (needs ${job.cost:.2f}).")
+            return
+
+        self.balance -= job.cost
+        self.job_market.remove(job)
+        self.add_job(job)
+        print(f"Bought job: {job.name} for ${job.cost:.2f}. New balance: ${self.balance:.2f}")
+
+    def assign_job_to_server(self, server_index, job):
+        if job not in self.jobs:
+            print("Job not found in the job list.")
+            return
+        if self.is_job_running(job):
+            print(f"Job {job.name} is already running on a server.")
+            return
+        
+        server = self.servers[server_index]
+        server.start_job(job)
+
+    def is_job_running(self, job):
+        return any(server.current_job is job for server in self.servers)
+
+    def sell_job(self, job):
+        if job not in self.jobs or not job.is_decrypted:
+            print(f"Cannot sell job: {job.name}. It is either not owned or not decrypted.")
+            return
+        if job.data_type not in self.market.categories:
+            print(f"Cannot sell job: {job.name}. Unknown category '{job.data_type}'.")
+            return
+
+        price = self.market.get_price(job.data_type)
+        self.balance += price
+        self.jobs.remove(job)
+        print(f"Sold job: {job.name} for ${price:.2f}. New balance: ${self.balance:.2f}")
+
+    def expected_profit(self, job):
+        price = self.market.get_price(job.data_type)
+        profit = price - job.cost
+        pct = (profit / job.cost * 100.0) if job.cost > 0 else 0.0
+        return profit, pct
+
+    def _declare_game_over(self, reason):
+        self.game_over = True
+        self.game_over_reason = reason
+        print(f"GAME OVER: {reason}")
+
+    def _check_bankruptcy(self):
+        if self.balance < 0:
+            self._declare_game_over("Your balance fell below zero.")
+            return
+
+        cheapest_server = min(t["capex"] for t in SERVER_CATALOG)
+        has_sellable = any(job.is_decrypted for job in self.jobs)
+        if not self.servers and not has_sellable and self.balance < cheapest_server:
+            self._declare_game_over("You cannot afford a server and have nothing left to sell.")
+
+    def update(self, dt):
+        if self.game_over:
+            return
+
+        self.elapsed_time += dt
+        self.market.update(dt)
+
+        for job in self.job_market:
+            job.time_left -= dt
+        self.job_market = [job for job in self.job_market if job.time_left > 0]
+        new_job = self.job_generator.update(dt, len(self.job_market))
+        if new_job is not None:
+            self.job_market.append(new_job)
+
+        total_opex = 0.0
+
+        for server in self.servers:
+            finished_job = server.update(dt)
+            if finished_job is not None:
+                pass
+            if server.state in [ServerState.WORKING, ServerState.OVERHEATED]:
+                total_opex += server.opex_per_sec * dt
+            else:
+                total_opex += (server.opex_per_sec * server.idle_multiplier) * dt
+
+        self.balance -= total_opex
+        self._check_bankruptcy()
+
+        
+=== END: ./src/model.py ===
+
+
+=== FILE: ./src/name_generator.py ===
+
+import random
+from name_pools import NAME_POOLS, NAME_TEMPLATES
+
+def generate_name(category_name):
+    pools = NAME_POOLS.get(category_name)
+    templates = NAME_TEMPLATES.get(category_name)
+
+    if not pools or not templates:
+        return f"Unknown-{category_name}"
+
+    template = random.choice(templates)
+    kwargs = {key: random.choice(values) for key, values in pools.items()}
+    if category_name == "Military":
+        kwargs["number"] = random.randint(1, 99)
+
+    return template.format(**kwargs)
+=== END: ./src/name_generator.py ===
+
+
+=== FILE: ./src/name_pools.py ===
+
+NAME_POOLS = {
+    "Personal": {
+        "first_name": [
+            "James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph", "Thomas", "Charles", 
+            "Christopher", "Daniel", "Matthew", "Anthony", "Mark", "Donald", "Steven", "Paul", "Andrew", "Joshua",
+            "Mary", "Patricia", "Jennifer", "Linda", "Elizabeth", "Barbara", "Susan", "Jessica", "Sarah", "Karen", 
+            "Lisa", "Nancy", "Betty", "Margaret", "Sandra", "Ashley", "Kimberly", "Emily", "Donna", "Michelle"
+        ],
+        "last_name": [
+            "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", 
+            "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin", 
+            "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson", 
+            "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores"
+        ]
+    },
+    "Small Business": {
+        "adjective": [
+            "Golden", "Swift", "Apex", "Reliable", "Prime", "Core", "Blue", 
+            "Summit", "First", "United", "Clear", "Elite", "Dynamic", 
+            "Solid", "Active", "Next", "Silver", "Iron", "Bright", "Grand"
+        ],
+        "noun": [
+            "Valley", "Ridge", "Point", "Wave", "Star", "Path", "Stone", 
+            "Line", "Horizon", "Crest", "Peak", "Shield", "Oak", "River", 
+            "Light", "Way", "Mark", "Link", "Bridge", "Harbor"
+        ],
+        "business_type": [
+            "LLC", "Services", "Consulting", "Logistics", "Solutions", 
+            "Partners", "Group", "Associates", "Agency", "Studio", 
+            "Ventures", "Builders", "Supply", "Management", "Trades"
+        ]
+    },
+    "Large Corporation": {
+        "corp_name": [
+            "Omnis", "Veridian", "Zenith", "Nexus", "Lumina", "Aegis", "Vanguard", 
+            "Globex", "Vesper", "Cobalt", "Obsidian", "Zephyr", "Titan", "Altis", 
+            "Praxis", "Axiom", "Helios", "Meridian", "Strata", "Novus", "Vertex", 
+            "Continuum", "Paragon", "Soliant", "Echelon", "Kymera", "Aeterna", 
+            "Synergis", "Kinetix", "Acentia", "Ventoris", "Pangea", "Cryon", 
+            "Thalassa", "Aether", "Volta", "Stratos", "Corvus", "Ares", "Triton"
+        ],
+        "corp_suffix": [
+            "Holding", "Group", "Industries", "Global", "Corporation", 
+            "Enterprises", "Financial", "Technologies", "Dynamics", "Manufacturing"
+        ]
+    },
+    "Government": {
+        "gov_prefix": [
+            "Department of", "Bureau of", "Office of", "Ministry of", 
+            "Agency for", "Commission on", "Division of", "Directorate of", 
+            "Federal Bureau of", "National Office of", "Administration for"
+        ],
+        "gov_topic": [
+            "Internal Revenue", "Vital Statistics", "Urban Planning", "Public Records",
+            "Internal Affairs", "National Security", "Energy", "Transportation", 
+            "Commerce", "Labor", "Health Services", "Public Safety", 
+            "Environmental Protection", "Civic Infrastructure", "Telecommunications", 
+            "Foreign Trade", "Cyber Defense", "Information", "Housing", 
+            "Agriculture", "Science and Technology", "Emergency Management", 
+            "Border Control", "Tax Administration", "Justice", "Intelligence"
+        ]
+    },
+    "Military": {
+        "mil_designation": [
+            "Armored", "Signal", "Recon", "Intelligence", "Comms Relay", 
+            "Tactical", "Strategic", "Logistics", "Cyber Defense", 
+            "Air Defense", "Special Operations", "Expeditionary", "Assault", 
+            "Electronic Warfare", "Surveillance", "Rapid Response"
+        ],
+        "mil_unit_type": [
+            "Division", "Battalion", "Squadron", "Regiment", 
+            "Brigade", "Task Force", "Wing", "Command", "Flotilla"
+        ]
+    }
+}
+
+NAME_TEMPLATES = {
+    "Personal": [
+        "{first_name} {last_name}"
+    ],
+    "Small Business": [
+        "{adjective} {noun} {business_type}"
+    ],
+    "Large Corporation": [
+        "{corp_name} {corp_suffix}"
+    ],
+    "Government": [
+        "{gov_prefix} {gov_topic}"
+    ],
+    "Military": [
+        "{number}. {mil_designation} {mil_unit_type}"
+    ]
+}
+=== END: ./src/name_pools.py ===
+
+
+=== FILE: ./src/settings.py ===
+
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
+FPS = 60
+CAPTION = "Jatek v0.1"
+
+COLOR_BG = (0, 0, 0)
+COLOR_PANEL = (15, 25, 15)
+COLOR_PANEL_LIGHT = (20, 35, 20)
+COLOR_BORDER = (40, 120, 40)
+COLOR_TEXT = (50, 205, 50)
+COLOR_TEXT_DIM = (30, 110, 30)
+COLOR_WORKING = (50, 205, 50)
+COLOR_OVERHEAT = (255, 70, 70)
+COLOR_IDLE = (90, 130, 90)
+COLOR_SELECT = (160, 255, 160)
+
+OWNED_ROW_HEIGHT = 56
+TAB_BAR_HEIGHT = 50
+CARD_RADIUS = 6
+
+ROW_HEIGHT = 44
+TABLE_MARGIN = 20
+COLOR_ROW_HOVER = (25, 50, 25)
+
+FONT_PATH = "src/VT323-Regular.ttf"
+FONT_SIZE = 32
+FONT_SIZE_SMALL = 20
+
+DEFAULT_STARTING_BALANCE = 5000.0
+
+MAX_SERVERS = 5
+SERVER_BASE_TEMP = 30.0
+SERVER_HEATING_RATE = 0.1
+SERVER_COOLING_RATE = 0.2
+SERVER_RESALE_RATIO = 0.6
+
+JOB_GENERATION_INTERVAL = 4.0 #seconds for each try
+JOB_POOL_MAX_SIZE = 6
+JOB_WORK_VARIANCE = 0.3 #+- 30% of base work time
+JOB_COST_RATIO_MIN = 0.55
+JOB_COST_RATIO_MAX = 0.95
+JOB_LIFETIME_MIN = 25.0
+JOB_LIFETIME_MAX = 60.0
+
+SERVER_CATALOG = [
+    {
+        "model": "Basic Rack",
+        "capex": 1500.0,
+        "opex": 10.0,
+        "processing_speed": 5.0,
+        "max_temperature": 80.0,
+        "idle_multiplier": 0.20
+    },
+    {
+        "model": "Mid Rack",
+        "capex": 6000.0,
+        "opex": 25.0,
+        "processing_speed": 15.0,
+        "max_temperature": 90.0,
+        "idle_multiplier": 0.25
+    },
+    {
+        "model": "Enterprise Rack",
+        "capex": 25000.0,
+        "opex": 70.0,
+        "processing_speed": 45.0,
+        "max_temperature": 100.0,
+        "idle_multiplier": 0.30
+    }
+]
+
+MARKET_TICK_RATE = 1.0
+MARKET_HISTORY_LENGTH = 30
+
+MARKET_CATEGORIES_CONFIG = {
+    "Personal": {
+        "base_price": 250.0,
+        "volatility": 0.015,
+        "gravity": 0.005,
+        "min_price": 50.0,
+        "max_price": 600.0,
+        "job_work_base": 30.0
+    },
+    "Small Business": {
+        "base_price": 4500.0,
+        "volatility": 0.02,
+        "gravity": 0.008,
+        "min_price": 1500.0,
+        "max_price": 12000.0,
+        "job_work_base": 150.0
+    },
+    "Large Corporation": {
+        "base_price": 55000.0,
+        "volatility": 0.04,
+        "gravity": 0.002,
+        "min_price": 10000.0,
+        "max_price": 160000.0,
+        "job_work_base": 600.0
+    },
+    "Government": {
+        "base_price": 55000.0,
+        "volatility": 0.008,
+        "gravity": 0.05,
+        "min_price": 45000.0,
+        "max_price": 70000.0,
+        "job_work_base": 900.0
+    },
+    "Military": {
+        "base_price": 1500000.0,
+        "volatility": 0.025,
+        "gravity": 0.005,
+        "min_price": 500000.0,
+        "max_price": 4500000.0,
+        "job_work_base": 2000.0
+    }
+}
+
+
+
+=== END: ./src/settings.py ===
+
+
+=== FILE: ./src/states.py ===
+
+from model import ServerState
+
+class BaseState:
+    label = "UNNAMED"
+
+    def handle_click(self, hit, economy):
+        pass
+
+    def on_enter(self):
+        pass
+
+    def on_exit(self):
+        pass
+
+class DashboardState(BaseState):
+    label = "Dashboard"
+
+    def __init__(self):
+        self.selected_job = None
+
+    def handle_click(self, hit, economy):
+        if hit is None:
+            self.selected_job = None
+            return
+        kind, obj = hit
+
+        if kind == "owned_job":
+            self.selected_job = None if obj is self.selected_job else obj
+        elif kind == "sellable_job":
+            economy.sell_job(obj)
+        elif kind == "server" and self.selected_job is not None:
+            if obj.state == ServerState.IDLE:
+                server_index = economy.servers.index(obj)
+                economy.assign_job_to_server(server_index, self.selected_job)
+                self.selected_job = None
+        elif kind == "server_sell":
+            economy.sell_server(obj)
+        
+    def on_exit(self):
+        self.selected_job = None
+
+class MarketplaceState(BaseState):
+    label = "Marketplace"
+
+    def handle_click(self, hit, economy):
+        if hit is None:
+            return
+        kind, obj = hit
+        if kind == "job":
+            economy.buy_job(obj)
+        elif kind == "server_offer":
+            economy.buy_server(obj)
+=== END: ./src/states.py ===
+
+
+=== FILE: ./src/test.py ===
+
+from name_generator import generate_name
+
+for category in ["Personal", "Small Business", "Large Corporation", "Government", "Military"]:
+    for _ in range(5):
+        print(generate_name(category))
+=== END: ./src/test.py ===
+
+
+=== FILE: ./src/view.py ===
+
+import pygame
+from settings import *
+from model import ServerState
+
+class GameView:
+    JOB_COLUMNS = [
+        ("NAME",     0.00, "left"),
+        ("CATEGORY", 0.28, "left"),
+        ("WORK",     0.50, "right"),
+        ("COST",     0.64, "right"),
+        ("PROFIT",   0.82, "right"),
+        ("EXPIRES",  0.97, "right"),
+    ]
+    SHOP_COLUMNS = [
+        ("MODEL",    0.00, "left"),
+        ("SPEED",    0.45, "right"),
+        ("MAX TEMP", 0.58, "right"),
+        ("OPEX",     0.70, "right"),
+        ("COST",     0.85, "right"),
+    ]
+    
+    def __init__(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption(CAPTION)
+        self.font = pygame.font.Font(FONT_PATH, FONT_SIZE)
+        self.font_small = pygame.font.Font(FONT_PATH, FONT_SIZE_SMALL)
+        self.tab_rects = {}
+        self.hitboxes = []
+        self.renderers = {
+            "dashboard": self._draw_dashboard,
+            "marketplace": self._draw_marketplace,
+        }
+
+    def draw(self, economy, states, active_tab_key, mouse_pos):
+        self.screen.fill(COLOR_BG)
+        self.hitboxes.clear()
+
+        tabs = {key: state.label for key, state in states.items()}
+        self._draw_tab_bar(tabs, active_tab_key)
+
+        self.renderers[active_tab_key](economy, mouse_pos, states[active_tab_key])
+
+        if economy.game_over:
+            self._draw_game_over(economy, mouse_pos)
+            
+        pygame.display.flip()
+
+    def _add_hitbox(self, rect, kind, obj):
+        self.hitboxes.append({"rect": rect, "kind": kind, "obj": obj})
+
+    def get_hit(self, pos):
+        for hb in reversed(self.hitboxes):
+            if hb["rect"].collidepoint(pos):
+                return (hb["kind"], hb["obj"])
+        return None
+
+    def _draw_dashboard(self, economy, mouse_pos, state):
+        w = self.screen.get_width()
+        market_w = int(w * 0.3)
+        server_w = int(w * 0.5)
+        finance_w = int(w * 0.2)
+
+        self._draw_market_panel(economy.market, 0, market_w)
+        self._draw_server_panel(economy.servers, market_w, server_w, mouse_pos, state.selected_job)
+        self._draw_finance_panel(economy, market_w + server_w, finance_w, mouse_pos, state.selected_job)
+
+    def _draw_marketplace(self, economy, mouse_pos, state):
+        panel_w = self.screen.get_width()
+        self._draw_panel_bg(0, panel_w)
+        self._draw_panel_title("---JOB MARKET---", 0)
+
+        count_str = f"{len(economy.job_market)}/{economy.job_generator.pool_max_size}"
+        count_surf = self.font.render(count_str, False, COLOR_TEXT_DIM)
+        self.screen.blit(count_surf, (panel_w - TABLE_MARGIN - count_surf.get_width(),
+                                      TAB_BAR_HEIGHT + 20))
+
+        table_x = TABLE_MARGIN
+        table_w = panel_w - 2 * TABLE_MARGIN
+        y = TAB_BAR_HEIGHT + 90
+
+        for text, frac, align in self.JOB_COLUMNS:
+            self._blit_cell(self.font_small, text, COLOR_TEXT_DIM,
+                            table_x + 10, table_w - 20, frac, align, y)
+        y += 30
+        pygame.draw.line(self.screen, COLOR_BORDER, (table_x, y), (table_x + table_w, y), 2)
+        y += 4
+
+        if not economy.job_market:
+            empty = self.font.render("No jobs available right now...", False, COLOR_TEXT_DIM)
+            self.screen.blit(empty, (table_x + 10, y + 20))
+            y += ROW_HEIGHT
+        else:
+            for job in economy.job_market:
+                        row_rect = pygame.Rect(table_x, y, table_w, ROW_HEIGHT)
+                        self._add_hitbox(row_rect, "job", job)
+            
+                        if row_rect.collidepoint(mouse_pos):
+                            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, row_rect)
+            
+                        cost_color = COLOR_TEXT if economy.balance >= job.cost else COLOR_OVERHEAT
+                        profit, pct = economy.expected_profit(job)
+                        profit_color = COLOR_TEXT if profit >= 0 else COLOR_OVERHEAT
+                        sign = "+" if profit >= 0 else "-"
+                        profit_str = f"{sign}${abs(profit):,.0f} ({sign}{abs(pct):.0f}%)"
+
+                        values = [
+                            (job.name, COLOR_TEXT),
+                            (job.data_type, COLOR_TEXT),
+                            (f"{job.total_work:,.0f}", COLOR_TEXT),
+                            (f"${job.cost:,.0f}", cost_color),
+                            (profit_str, profit_color),
+                            (f"{job.time_left:.0f}s",COLOR_OVERHEAT if job.time_left < 10 else COLOR_TEXT_DIM),
+                        ]
+                        
+                        for (_, frac, align), (value, color) in zip(self.JOB_COLUMNS, values):
+                            self._blit_cell(self.font, value, color,
+                                            table_x + 10, table_w - 20, frac, align, y + 8)
+            
+                        pygame.draw.line(self.screen, COLOR_BORDER,
+                                         (table_x, row_rect.bottom), (table_x + table_w, row_rect.bottom), 1)
+                        y += ROW_HEIGHT
+        y += 30
+        self._draw_server_shop(economy, mouse_pos, table_x, table_w, y)
+
+    def _draw_server_shop(self, economy, mouse_pos, table_x, table_w, y):
+        title = self.font.render("---SERVER SHOP---", False, COLOR_TEXT)
+        self.screen.blit(title, (table_x, y))
+
+        count_surf = self.font.render(f"{len(economy.servers)}/{MAX_SERVERS}", False, COLOR_TEXT_DIM)
+        self.screen.blit(count_surf, (table_x + table_w - count_surf.get_width(), y))
+        y += 50
+
+        for text, frac, align in self.SHOP_COLUMNS:
+            self._blit_cell(self.font_small, text, COLOR_TEXT_DIM,
+                            table_x + 10, table_w - 20, frac, align, y)
+        y += 30
+        pygame.draw.line(self.screen, COLOR_BORDER, (table_x, y), (table_x + table_w, y), 2)
+        y += 4
+
+        park_full = len(economy.servers) >= MAX_SERVERS
+
+        for offer in SERVER_CATALOG:
+            row_rect = pygame.Rect(table_x, y, table_w, ROW_HEIGHT)
+            self._add_hitbox(row_rect, "server_offer", offer)
+
+            affordable = economy.balance >= offer["capex"]
+            if affordable and not park_full and row_rect.collidepoint(mouse_pos):
+                pygame.draw.rect(self.screen, COLOR_ROW_HOVER, row_rect)
+
+            text_color = COLOR_TEXT_DIM if park_full else COLOR_TEXT
+            cost_color = COLOR_TEXT if affordable else COLOR_OVERHEAT
+
+            values = [
+                (offer["model"], text_color),
+                (f"{offer['processing_speed']:g}", text_color),
+                (f"{offer['max_temperature']:g}C", text_color),
+                (f"${offer['opex']:,.0f}/s", text_color),
+                (f"${offer['capex']:,.0f}", cost_color),
+            ]
+            for (_, frac, align), (value, color) in zip(self.SHOP_COLUMNS, values):
+                self._blit_cell(self.font, value, color,
+                                table_x + 10, table_w - 20, frac, align, y + 8)
+
+            pygame.draw.line(self.screen, COLOR_BORDER,
+                             (table_x, row_rect.bottom), (table_x + table_w, row_rect.bottom), 1)
+            y += ROW_HEIGHT
+
+    def _blit_cell(self, font, text, color, table_x, table_w, frac, align, y):
+        surf = font.render(text, False, color)
+        x = table_x + int(table_w * frac)
+        if align == "right":
+            x -= surf.get_width()
+        self.screen.blit(surf, (x, y))
+
+    def _draw_tab_bar(self, tabs, active_tab_key):
+        pygame.draw.rect(self.screen, COLOR_PANEL, (0, 0, SCREEN_WIDTH, TAB_BAR_HEIGHT))
+        pygame.draw.rect(self.screen, COLOR_BORDER, (0, 0, SCREEN_WIDTH, TAB_BAR_HEIGHT), 2)
+
+        self.tab_rects = {}
+        x = 20
+
+        for key, label in tabs.items():
+            is_active = (key == active_tab_key)
+            color = COLOR_TEXT if is_active else COLOR_TEXT_DIM
+
+            text_surface = self.font.render(label, False, color)
+            text_rect = text_surface.get_rect(topleft=(x, 12))
+            self.screen.blit(text_surface, text_rect)
+
+            self.tab_rects[key] = text_rect
+
+            x += text_rect.width + 40
+
+    def _draw_panel_bg(self, start_x, width):
+        panel_rect = pygame.Rect(start_x, TAB_BAR_HEIGHT, width, SCREEN_HEIGHT - TAB_BAR_HEIGHT)
+        pygame.draw.rect(self.screen, COLOR_PANEL, panel_rect)
+        pygame.draw.rect(self.screen, COLOR_BORDER, panel_rect, 2)
+
+    def _draw_panel_title(self, text, start_x):
+        title_text = self.font.render(text, False, COLOR_TEXT)
+        self.screen.blit(title_text, (start_x + 20, TAB_BAR_HEIGHT + 20))
+
+    def _draw_market_panel(self, market, start_x, width):
+        self._draw_panel_bg(start_x, width)
+        self._draw_panel_title("---BLACKMARKET---", start_x)
+        
+        y_offset = TAB_BAR_HEIGHT + 100
+
+        for category in market.categories.values():
+            price_str = f"{category.name}: ${category.current_price:,.0f}"
+            text_surface = self.font.render(price_str, False, COLOR_TEXT)
+            self.screen.blit(text_surface, (start_x + 20, y_offset))
+
+            graph_width = width - 40
+            graph_height = 80
+            graph_rect = pygame.Rect(start_x + 20, y_offset + 40, graph_width, graph_height)
+            pygame.draw.rect(self.screen, COLOR_BORDER, graph_rect, 1)
+
+            if len(category.price_history) > 1:
+                points = []
+                
+                local_min = min(category.price_history)
+                local_max = max(category.price_history)
+                
+                if local_max == local_min:
+                    local_max += 10
+                    local_min -= 10
+                
+                padding = (local_max - local_min) * 0.1
+                display_max = local_max + padding
+                display_min = local_min - padding
+                price_range = display_max - display_min
+
+                for i, past_price in enumerate(category.price_history):
+                    px = graph_rect.x + (i / (category.history_length - 1)) * graph_width
+                    normalized_y = (past_price - display_min) / price_range
+                    py = graph_rect.y + graph_rect.height - (normalized_y * graph_rect.height)
+                    points.append((px, py))
+
+                pygame.draw.aalines(self.screen, COLOR_TEXT, False, points)
+
+            y_offset += 170
+
+    def _draw_server_panel(self, servers, start_x, width, mouse_pos, selected_job):
+        self._draw_panel_bg(start_x, width)
+        self._draw_panel_title("---SERVERPARK---", start_x)
+
+        if selected_job is not None:
+            hint = self.font_small.render(
+                f"Select a server for: {selected_job.name}", False, COLOR_SELECT)
+            self.screen.blit(hint, (start_x + 20, TAB_BAR_HEIGHT + 65))
+
+        y_offset = TAB_BAR_HEIGHT + 100
+        rack_height = 150
+        rack_padding = 20
+        card_width = width - 40
+
+        state_colors = {
+            ServerState.IDLE: COLOR_IDLE,
+            ServerState.WORKING: COLOR_WORKING,
+            ServerState.OVERHEATED: COLOR_OVERHEAT
+        }
+
+        for server in servers:
+            rect = pygame.Rect(start_x + 20, y_offset, card_width, rack_height)
+            self._add_hitbox(rect, "server", server)
+
+            color = state_colors[server.state]
+
+            assignable = selected_job is not None and server.state == ServerState.IDLE
+            hovered = rect.collidepoint(mouse_pos)
+
+            bg = COLOR_ROW_HOVER if (assignable and hovered) else COLOR_PANEL_LIGHT
+            pygame.draw.rect(self.screen, bg, rect, border_radius=CARD_RADIUS)
+
+            if assignable:
+                pygame.draw.rect(self.screen, COLOR_SELECT, rect, 3, border_radius=CARD_RADIUS)
+            else:
+                pygame.draw.rect(self.screen, color, rect, 2, border_radius=CARD_RADIUS)
+
+            self._draw_server_header(server, rect, color)
+            self._draw_temp_bar(server, rect, color)
+            self._draw_progress_bar(server, rect)
+            self._draw_sell_button(server, rect, mouse_pos)
+
+            y_offset += rack_height + rack_padding
+
+    def _draw_server_header(self, server, rect, color):
+        name_text = self.font.render(server.name, False, COLOR_TEXT)
+        self.screen.blit(name_text, (rect.x + 15, rect.y + 12))
+
+        status_text = self.font_small.render(server.state.name, False, color)
+        status_x = rect.right - status_text.get_width() - 15
+        self.screen.blit(status_text, (status_x, rect.y + 18))
+
+        if server.state == ServerState.WORKING and server.current_job:
+            job_text = self.font_small.render(
+                f"Job: {server.current_job.name}", False, COLOR_TEXT_DIM
+            )
+            self.screen.blit(job_text, (rect.x + 15, rect.y + 45))
+
+    def _draw_temp_bar(self, server, rect, color):
+        label = self.font_small.render("TEMP", False, COLOR_TEXT_DIM)
+        self.screen.blit(label, (rect.x + 15, rect.y + 75))
+
+        bar_rect = pygame.Rect(rect.x + 70, rect.y + 78, rect.width - 170, 16)
+        temp_range = server.max_temperature - SERVER_BASE_TEMP
+        current = server.temperature - SERVER_BASE_TEMP
+        pct = max(0.0, min(1.0, current / temp_range)) if temp_range > 0 else 0.0
+
+        self._draw_bar(bar_rect, pct, color)
+
+        value_text = self.font_small.render(f"{server.temperature:.1f}C", False, color)
+        self.screen.blit(value_text, (bar_rect.right + 10, bar_rect.y - 1))
+
+    def _draw_progress_bar(self, server, rect):
+        label = self.font_small.render("PROG", False, COLOR_TEXT_DIM)
+        self.screen.blit(label, (rect.x + 15, rect.y + 105))
+
+        bar_rect = pygame.Rect(rect.x + 70, rect.y + 108, rect.width - 170, 16)
+
+        if server.state == ServerState.WORKING and server.current_job:
+            pct = 1.0 - (server.current_job.remaining_work / server.current_job.total_work)
+        else:
+            pct = 0.0
+
+        self._draw_bar(bar_rect, pct, COLOR_TEXT)
+
+    def _draw_sell_button(self, server, rect, mouse_pos):
+        if server.state != ServerState.IDLE:
+            return
+
+        btn = pygame.Rect(rect.right - 95, rect.y + 100, 85, 30)
+        self._add_hitbox(btn, "server_sell", server)
+
+        if btn.collidepoint(mouse_pos):
+            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=4)
+        pygame.draw.rect(self.screen, COLOR_OVERHEAT, btn, 1, border_radius=4)
+
+        label = self.font_small.render(f"SELL ${server.sell_value():,.0f}", False, COLOR_OVERHEAT)
+        self.screen.blit(label, label.get_rect(center=btn.center))
+
+    def _draw_bar(self, rect, pct, fill_color):
+        pygame.draw.rect(self.screen, COLOR_PANEL, rect, border_radius=4)
+        pygame.draw.rect(self.screen, COLOR_BORDER, rect, 1, border_radius=4)
+
+        if pct > 0:
+            fill_rect = pygame.Rect(rect.x, rect.y, int(rect.width * pct), rect.height)
+            pygame.draw.rect(self.screen, fill_color, fill_rect, border_radius=4)
+
+    def _draw_finance_panel(self, economy, start_x, width, mouse_pos, selected_job):
+        self._draw_panel_bg(start_x, width)
+
+        # title
+        balance_text = self.font.render(f"Balance: ${economy.balance:.2f}", False, COLOR_TEXT)
+        self.screen.blit(balance_text, (start_x + 20, TAB_BAR_HEIGHT + 20))
+
+        y = TAB_BAR_HEIGHT + 90
+        title = self.font.render("--OWNED JOBS--", False, COLOR_TEXT)
+        self.screen.blit(title, (start_x + 20, y))
+        y += 45
+
+        if not economy.jobs:
+            empty = self.font_small.render("No jobs yet. Buy some!", False, COLOR_TEXT_DIM)
+            self.screen.blit(empty, (start_x + 20, y))
+            return
+
+        for job in economy.jobs:
+            rect = pygame.Rect(start_x + 10, y, width - 20, OWNED_ROW_HEIGHT - 4)
+
+            running = economy.is_job_running(job)
+            selectable = not job.is_decrypted and not running
+            sellable = job.is_decrypted
+
+            if selectable:
+                self._add_hitbox(rect, "owned_job", job)
+            elif sellable:
+                self._add_hitbox(rect, "sellable_job", job)
+
+            if job is selected_job:
+                pygame.draw.rect(self.screen, COLOR_SELECT, rect, 2, border_radius=4)
+            elif selectable and rect.collidepoint(mouse_pos):
+                pygame.draw.rect(self.screen, COLOR_ROW_HOVER, rect, border_radius=4)
+
+            name_color = COLOR_TEXT if (selectable or sellable) else COLOR_TEXT_DIM
+            name_surf = self.font_small.render(job.name, False, name_color)
+            self.screen.blit(name_surf, (rect.x + 8, rect.y + 6))
+            
+            if sellable:
+                price = economy.market.get_price(job.data_type)
+                profit = price - job.cost
+                profit_color = COLOR_TEXT if profit >= 0 else COLOR_OVERHEAT
+                sign = "+" if profit >= 0 else "-"
+
+                sell_surf = self.font_small.render(f"SELL ${price:,.0f}", False, COLOR_SELECT)
+                self.screen.blit(sell_surf, (rect.right - sell_surf.get_width() - 8, rect.y + 6))
+
+                info = f"{job.data_type} | {sign}${abs(profit):,.0f}"
+                info_surf = self.font_small.render(info, False, profit_color)
+            else:
+                status = "RUNNING" if running else f"{job.remaining_work:,.0f} left"
+                info_surf = self.font_small.render(f"{job.data_type} | {status}", False, COLOR_TEXT_DIM)
+
+            self.screen.blit(info_surf, (rect.x + 8, rect.y + 28))
+
+            y += OWNED_ROW_HEIGHT
+
+    def _draw_game_over(self, economy, mouse_pos):
+        self.hitboxes.clear()
+
+        w, h = self.screen.get_size()
+        shade = pygame.Surface((w, h), pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 200))
+        self.screen.blit(shade, (0, 0))
+
+        box = pygame.Rect(0, 0, 800, 420)
+        box.center = (w // 2, h // 2)
+        pygame.draw.rect(self.screen, COLOR_PANEL, box, border_radius=CARD_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_OVERHEAT, box, 3, border_radius=CARD_RADIUS)
+
+        minutes = int(economy.elapsed_time) // 60
+        seconds = int(economy.elapsed_time) % 60
+        lines = [
+            ("--BANKRUPT--", self.font, COLOR_OVERHEAT),
+            (economy.game_over_reason, self.font_small, COLOR_TEXT),
+            (f"Elapsed time: {minutes}m {seconds:02d}s", self.font, COLOR_TEXT),
+            (f"Final balance: ${economy.balance:,.2f}", self.font, COLOR_TEXT),
+        ]
+        y = box.y + 40
+        for text, font, color in lines:
+            surf = font.render(text, False, color)
+            self.screen.blit(surf, surf.get_rect(midtop=(box.centerx, y)))
+            y += surf.get_height() + 25
+
+        btn = pygame.Rect(0, 0, 300, 60)
+        btn.midbottom = (box.centerx, box.bottom - 40)
+        self._add_hitbox(btn, "restart", None)
+
+        if btn.collidepoint(mouse_pos):
+            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=CARD_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_TEXT, btn, 2, border_radius=CARD_RADIUS)
+
+        label = self.font.render("RESTART [R]", False, COLOR_TEXT)
+        self.screen.blit(label, label.get_rect(center=btn.center))
+=== END: ./src/view.py ===
+
