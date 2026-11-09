@@ -31,7 +31,7 @@ class GameController:
 
     def run(self):
         while self.running:
-            dt = self.clock.tick(FPS) / 1000.0
+            dt = min(self.clock.tick(FPS) / 1000.0, 0.1)
             self.handle_events()
             self.model.update(dt)
             mouse_pos = pygame.mouse.get_pos()

@@ -46,8 +46,8 @@ class JobGenerator:
     def update(self, dt, current_pool_size):
         self.time_since_last_spawn += dt
 
-        if self.time_since_last_spawn > self.spawn_interval:
-            self.time_since_last_spawn = 0.0
+        if self.time_since_last_spawn >= self.spawn_interval:
+            self.time_since_last_spawn -= self.spawn_interval
             if current_pool_size < self.pool_max_size:
                 return self._generate_job()
 
@@ -197,9 +197,8 @@ class Market:
 
     def update(self, dt):
         self.time_since_last_tick += dt
-
-        if self.time_since_last_tick > self.tick_rate:
-            self.time_since_last_tick = 0.0
+        while self.time_since_last_tick >= self.tick_rate:
+            self.time_since_last_tick -= self.tick_rate
             for category in self.categories.values():
                 category.update_price()
 
