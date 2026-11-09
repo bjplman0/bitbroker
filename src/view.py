@@ -205,43 +205,69 @@ class GameView:
     def _draw_market_panel(self, market, start_x, width):
         self._draw_panel_bg(start_x, width)
         self._draw_panel_title("---BLACKMARKET---", start_x)
-        
-        y_offset = TAB_BAR_HEIGHT + 100
+
+        card_h = 178
+        gap = 6
+        y = TAB_BAR_HEIGHT + 80
 
         for category in market.categories.values():
-            price_str = f"{category.name}: ${category.current_price:,.0f}"
-            text_surface = self.font.render(price_str, False, COLOR_TEXT)
-            self.screen.blit(text_surface, (start_x + 20, y_offset))
+            rect = pygame.Rect(start_x + 20, y, width - 40, card_h)
+            self._draw_price_card(category, rect)
+            y += card_h + gap
 
-            graph_width = width - 40
-            graph_height = 80
-            graph_rect = pygame.Rect(start_x + 20, y_offset + 40, graph_width, graph_height)
-            pygame.draw.rect(self.screen, COLOR_BORDER, graph_rect, 1)
+    def _draw_dashed_hline(self, color, x1, x2, y, dash=6, gap=5):
+        y = int(y)
+        x = int(x1)
+        while x < x2:
+            pygame.draw.line(self.screen, color, (x, y), (min(x + dash, int(x2)), y), 1)
+            x += dash + gap
 
-            if len(category.price_history) > 1:
-                points = []
-                
-                local_min = min(category.price_history)
-                local_max = max(category.price_history)
-                
-                if local_max == local_min:
-                    local_max += 10
-                    local_min -= 10
-                
-                padding = (local_max - local_min) * 0.1
-                display_max = local_max + padding
-                display_min = local_min - padding
-                price_range = display_max - display_min
+    def _draw_price_card(self, category, rect):
+        history = category.price_history
+        price = category.current_price
+        base = category.base_price
 
-                for i, past_price in enumerate(category.price_history):
-                    px = graph_rect.x + (i / (category.history_length - 1)) * graph_width
-                    normalized_y = (past_price - display_min) / price_range
-                    py = graph_rect.y + graph_rect.height - (normalized_y * graph_rect.height)
-                    points.append((px, py))
+        pygame.draw.rect(self.screen, COLOR_PANEL_LIGHT, rect, border_radius=CARD_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_BORDER, rect, 2, border_radius=CARD_RADIUS)
 
-                pygame.draw.aalines(self.screen, COLOR_TEXT, False, points)
+        price_color = COLOR_TEXT if price >= base else COLOR_WARN
 
-            y_offset += 170
+        name_surf = self.font.render(category.name, False, COLOR_TEXT)
+        self.screen.blit(name_surf, (rect.x + 15, rect.y + 8))
+        price_surf = self.font.render(f"${price:,.0f}", False, price_color)
+        self.screen.blit(price_surf, (rect.right - price_surf.get_width() - 15, rect.y + 8))
+
+        plot = pygame.Rect(rect.x + 15, rect.y + 50, rect.width - 30, rect.height - 50 - 14)
+        pygame.draw.rect(self.screen, COLOR_BORDER, plot, 1)
+
+        n = len(history)
+        if n < 2:
+            return
+
+        lo = min(min(history), base)
+        hi = max(max(history), base)
+        min_span = base * 0.02
+        if hi - lo < min_span:
+            mid = (hi + lo) / 2
+            lo, hi = mid - min_span / 2, mid + min_span / 2
+        pad = (hi - lo) * 0.12
+        lo -= pad
+        hi += pad
+
+        def to_px(i, v):
+            return (plot.x + i / (n - 1) * plot.width,
+                    plot.bottom - (v - lo) / (hi - lo) * plot.height)
+
+        _, base_y = to_px(0, base)
+        self._draw_dashed_hline(COLOR_TEXT_DIM, plot.x + 1, plot.right - 1, base_y)
+
+        points = [to_px(i, v) for i, v in enumerate(history)]
+        pygame.draw.aalines(self.screen, COLOR_TEXT, False, points)
+
+        hi_surf = self.font_small.render(f"${hi:,.0f}", False, COLOR_TEXT_DIM)
+        lo_surf = self.font_small.render(f"${lo:,.0f}", False, COLOR_TEXT_DIM)
+        self.screen.blit(hi_surf, (plot.x + 6, plot.y + 2))
+        self.screen.blit(lo_surf, (plot.x + 6, plot.bottom - lo_surf.get_height() - 2))
 
     def _draw_server_panel(self, servers, start_x, width, mouse_pos, selected_job):
         self._draw_panel_bg(start_x, width)
