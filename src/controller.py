@@ -69,6 +69,8 @@ class GameController:
                 self.view.draw_main_menu(mouse_pos, self.repo.exists())
             else:
                 self.view.draw(self.model, self.states, self.active_tab_key, mouse_pos, paused=self.paused,)
+        if self.mode == "playing" and not self.model.game_over:
+            self.repo.save(self.model)
         pygame.quit()
 
     def handle_events(self):
@@ -114,7 +116,6 @@ class GameController:
             return
         
         if self.model.game_over:
-            hit = self.view.get_hit(pos)
             if hit and hit[0] == "restart":
                 self._new_game()
             elif hit and hit[0] == "game_over_menu":

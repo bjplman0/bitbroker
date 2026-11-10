@@ -3,22 +3,6 @@ from settings import *
 from model import ServerState
 
 class GameView:
-    JOB_COLUMNS = [
-        ("NAME",     0.00, "left"),
-        ("CATEGORY", 0.28, "left"),
-        ("WORK",     0.50, "right"),
-        ("COST",     0.64, "right"),
-        ("PROFIT",   0.82, "right"),
-        ("EXPIRES",  0.97, "right"),
-    ]
-    SHOP_COLUMNS = [
-        ("MODEL",    0.00, "left"),
-        ("SPEED",    0.45, "right"),
-        ("MAX TEMP", 0.58, "right"),
-        ("OPEX",     0.70, "right"),
-        ("COST",     0.85, "right"),
-    ]
-    
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -57,7 +41,7 @@ class GameView:
         pygame.draw.rect(self.screen, COLOR_PANEL, (0, 0, w, h))
         pygame.draw.rect(self.screen, COLOR_BORDER, (0, 0, w, h), 2)
 
-        box = pygame.Rect(0, 0, 520, 440)
+        box = pygame.Rect(0, 0, MENU_BOX_WIDTH, MENU_BOX_HEIGHT)
         box.center = (w // 2, h // 2)
         pygame.draw.rect(self.screen, COLOR_PANEL_LIGHT, box, border_radius=CARD_RADIUS)
         pygame.draw.rect(self.screen, COLOR_BORDER, box, 2, border_radius=CARD_RADIUS)
@@ -66,7 +50,7 @@ class GameView:
         self.screen.blit(title_surf, title_surf.get_rect(midtop=(box.centerx, box.y + 45)))
 
         subtitle_surf = self.font_small.render("SERVER PARK MANAGEMENT SIMULATION", False, COLOR_TEXT_DIM)
-        self.screen.blit(subtitle_surf, subtitle_surf.get_rect(midtop=(box.centerx, box.y + 90)),)
+        self.screen.blit(subtitle_surf, subtitle_surf.get_rect(midtop=(box.centerx, box.y + 90)))
 
         buttons = [
             ("NEW GAME", "menu_new", True),
@@ -74,16 +58,15 @@ class GameView:
             ("QUIT", "menu_quit", True),
         ]
 
-        btn_w, btn_h = 320, 60
         y = box.y + 150
         for label_text, kind, enabled in buttons:
-            btn = pygame.Rect(0, 0, btn_w, btn_h)
+            btn = pygame.Rect(0, 0, MENU_BTN_WIDTH, MENU_BTN_HEIGHT)
             btn.midtop = (box.centerx, y)
 
             if enabled:
                 self._add_hitbox(btn, kind, None)
                 if btn.collidepoint(mouse_pos):
-                    pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=CARD_RADIUS,)
+                    pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=CARD_RADIUS)
                 border_color = COLOR_TEXT
                 text_color = COLOR_TEXT
             else:
@@ -93,7 +76,7 @@ class GameView:
             pygame.draw.rect(self.screen, border_color, btn, 2, border_radius=CARD_RADIUS)
             lbl = self.font.render(label_text, False, text_color)
             self.screen.blit(lbl, lbl.get_rect(center=btn.center))
-            y += btn_h + 25
+            y += MENU_BTN_HEIGHT + MENU_BTN_GAP
 
         pygame.display.flip()
 
@@ -102,10 +85,10 @@ class GameView:
 
         w, h = self.screen.get_size()
         shade = pygame.Surface((w, h), pygame.SRCALPHA)
-        shade.fill((0, 0, 0, 200))
+        shade.fill((0, 0, 0, OVERLAY_ALPHA))
         self.screen.blit(shade, (0, 0))
 
-        box = pygame.Rect(0, 0, 520, 320)
+        box = pygame.Rect(0, 0, PAUSE_BOX_WIDTH, PAUSE_BOX_HEIGHT)
         box.center = (w // 2, h // 2)
         pygame.draw.rect(self.screen, COLOR_PANEL, box, border_radius=CARD_RADIUS)
         pygame.draw.rect(self.screen, COLOR_BORDER, box, 3, border_radius=CARD_RADIUS)
@@ -118,10 +101,9 @@ class GameView:
             ("SAVE & QUIT TO MENU", "pause_save_quit"),
         ]
 
-        btn_w, btn_h = 360, 60
         y = box.y + 115
         for label_text, kind in buttons:
-            btn = pygame.Rect(0, 0, btn_w, btn_h)
+            btn = pygame.Rect(0, 0, PAUSE_BTN_WIDTH, PAUSE_BTN_HEIGHT)
             btn.midtop = (box.centerx, y)
             self._add_hitbox(btn, kind, None)
 
@@ -131,7 +113,7 @@ class GameView:
 
             lbl = self.font.render(label_text, False, COLOR_TEXT)
             self.screen.blit(lbl, lbl.get_rect(center=btn.center))
-            y += btn_h + 25
+            y += PAUSE_BTN_HEIGHT + MENU_BTN_GAP
 
     def _add_hitbox(self, rect, kind, obj):
         self.hitboxes.append({"rect": rect, "kind": kind, "obj": obj})
@@ -144,9 +126,9 @@ class GameView:
 
     def _draw_dashboard(self, economy, mouse_pos, state):
         w = self.screen.get_width()
-        market_w = int(w * 0.3)
-        server_w = int(w * 0.5)
-        finance_w = int(w * 0.2)
+        market_w = int(w * DASHBOARD_MARKET_RATIO)
+        server_w = int(w * DASHBOARD_SERVER_RATIO)
+        finance_w = int(w * DASHBOARD_FINANCE_RATIO)
 
         self._draw_market_panel(economy.market, 0, market_w)
         self._draw_server_panel(economy.servers, market_w, server_w, mouse_pos, state.selected_job)
@@ -160,13 +142,13 @@ class GameView:
         count_str = f"{len(economy.job_market)}/{economy.job_generator.pool_max_size}"
         count_surf = self.font.render(count_str, False, COLOR_TEXT_DIM)
         self.screen.blit(count_surf, (panel_w - TABLE_MARGIN - count_surf.get_width(),
-                                      TAB_BAR_HEIGHT + 20))
+                                      TAB_BAR_HEIGHT + PANEL_PADDING))
 
         table_x = TABLE_MARGIN
         table_w = panel_w - 2 * TABLE_MARGIN
         y = TAB_BAR_HEIGHT + 90
 
-        for text, frac, align in self.JOB_COLUMNS:
+        for text, frac, align in JOB_COLUMNS:
             self._blit_cell(self.font_small, text, COLOR_TEXT_DIM,
                             table_x + 10, table_w - 20, frac, align, y)
         y += 30
@@ -198,16 +180,16 @@ class GameView:
                     (f"${job.cost:,.0f}", cost_color),
                     (profit_str, profit_color),
                     (f"{job.time_left:.0f}s",
-                     COLOR_OVERHEAT if job.time_left < 10 else COLOR_TEXT_DIM),
+                     COLOR_OVERHEAT if job.time_left < JOB_EXPIRY_WARN_SEC else COLOR_TEXT_DIM),
                 ]
-                for (_, frac, align), (value, color) in zip(self.JOB_COLUMNS, values):
+                for (_, frac, align), (value, color) in zip(JOB_COLUMNS, values):
                     self._blit_cell(self.font, value, color,
                                     table_x + 10, table_w - 20, frac, align, y + 8)
 
                 pygame.draw.line(self.screen, COLOR_BORDER,
                                  (table_x, row_rect.bottom), (table_x + table_w, row_rect.bottom), 1)
                 y += ROW_HEIGHT
-        y += 30
+        y += SECTION_GAP_LARGE
         self._draw_server_shop(economy, mouse_pos, table_x, table_w, y)
 
     def _draw_server_shop(self, economy, mouse_pos, table_x, table_w, y):
@@ -218,7 +200,7 @@ class GameView:
         self.screen.blit(count_surf, (table_x + table_w - count_surf.get_width(), y))
         y += 50
 
-        for text, frac, align in self.SHOP_COLUMNS:
+        for text, frac, align in SHOP_COLUMNS:
             self._blit_cell(self.font_small, text, COLOR_TEXT_DIM,
                             table_x + 10, table_w - 20, frac, align, y)
         y += 30
@@ -240,12 +222,12 @@ class GameView:
 
             values = [
                 (offer["model"], text_color),
-                (f"{offer['processing_speed']:g}", text_color),
-                (f"{offer['max_temperature']:g}C", text_color),
+                (f"{offer['processing_speed']:.0f}", text_color),
+                (f"{offer['max_temperature']:.0f}C", text_color),
                 (f"${offer['opex']:,.0f}/s", text_color),
                 (f"${offer['capex']:,.0f}", cost_color),
             ]
-            for (_, frac, align), (value, color) in zip(self.SHOP_COLUMNS, values):
+            for (_, frac, align), (value, color) in zip(SHOP_COLUMNS, values):
                 self._blit_cell(self.font, value, color,
                                 table_x + 10, table_w - 20, frac, align, y + 8)
 
@@ -265,7 +247,7 @@ class GameView:
         pygame.draw.rect(self.screen, COLOR_BORDER, (0, 0, SCREEN_WIDTH, TAB_BAR_HEIGHT), 2)
 
         self.tab_rects = {}
-        x = 20
+        x = PANEL_PADDING
 
         for key, label in tabs.items():
             is_active = (key == active_tab_key)
@@ -277,7 +259,7 @@ class GameView:
 
             self.tab_rects[key] = text_rect
 
-            x += text_rect.width + 40
+            x += text_rect.width + TAB_ITEM_SPACING
 
     def _draw_panel_bg(self, start_x, width):
         panel_rect = pygame.Rect(start_x, TAB_BAR_HEIGHT, width, SCREEN_HEIGHT - TAB_BAR_HEIGHT)
@@ -286,22 +268,20 @@ class GameView:
 
     def _draw_panel_title(self, text, start_x):
         title_text = self.font.render(text, False, COLOR_TEXT)
-        self.screen.blit(title_text, (start_x + 20, TAB_BAR_HEIGHT + 20))
+        self.screen.blit(title_text, (start_x + PANEL_PADDING, TAB_BAR_HEIGHT + PANEL_PADDING))
 
     def _draw_market_panel(self, market, start_x, width):
         self._draw_panel_bg(start_x, width)
         self._draw_panel_title("---BLACKMARKET---", start_x)
 
-        card_h = 178
-        gap = 6
         y = TAB_BAR_HEIGHT + 80
 
         for category in market.categories.values():
-            rect = pygame.Rect(start_x + 20, y, width - 40, card_h)
+            rect = pygame.Rect(start_x + PANEL_PADDING, y, width - 2 * PANEL_PADDING, MARKET_CARD_HEIGHT)
             self._draw_price_card(category, rect)
-            y += card_h + gap
+            y += MARKET_CARD_HEIGHT + MARKET_CARD_GAP
 
-    def _draw_dashed_hline(self, color, x1, x2, y, dash=6, gap=5):
+    def _draw_dashed_hline(self, color, x1, x2, y, dash=DASH_LENGTH, gap=DASH_GAP):
         y = int(y)
         x = int(x1)
         while x < x2:
@@ -332,11 +312,11 @@ class GameView:
 
         lo = min(min(history), base)
         hi = max(max(history), base)
-        min_span = base * 0.02
+        min_span = base * MARKET_MIN_SPAN_RATIO
         if hi - lo < min_span:
             mid = (hi + lo) / 2
             lo, hi = mid - min_span / 2, mid + min_span / 2
-        pad = (hi - lo) * 0.12
+        pad = (hi - lo) * MARKET_CHART_PAD_RATIO
         lo -= pad
         hi += pad
 
@@ -362,12 +342,10 @@ class GameView:
         if selected_job is not None:
             hint = self.font_small.render(
                 f"Select a server for: {selected_job.name}", False, COLOR_SELECT)
-            self.screen.blit(hint, (start_x + 20, TAB_BAR_HEIGHT + 65))
+            self.screen.blit(hint, (start_x + PANEL_PADDING, TAB_BAR_HEIGHT + 65))
 
         y_offset = TAB_BAR_HEIGHT + 100
-        rack_height = 150
-        rack_padding = 20
-        card_width = width - 40
+        card_width = width - 2 * PANEL_PADDING
 
         state_colors = {
             ServerState.IDLE: COLOR_IDLE,
@@ -376,7 +354,7 @@ class GameView:
         }
 
         for server in servers:
-            rect = pygame.Rect(start_x + 20, y_offset, card_width, rack_height)
+            rect = pygame.Rect(start_x + PANEL_PADDING, y_offset, card_width, RACK_HEIGHT)
             self._add_hitbox(rect, "server", server)
 
             color = state_colors[server.state]
@@ -398,7 +376,7 @@ class GameView:
             self._draw_sell_button(server, rect, mouse_pos)
             self._draw_unload_button(server, rect, mouse_pos)
 
-            y_offset += rack_height + rack_padding
+            y_offset += RACK_HEIGHT + RACK_PADDING
 
     def _draw_server_header(self, server, rect, color):
         name_text = self.font.render(server.name, False, COLOR_TEXT)
@@ -419,7 +397,7 @@ class GameView:
         label = self.font_small.render("TEMP", False, COLOR_TEXT_DIM)
         self.screen.blit(label, (rect.x + 15, rect.y + 75))
 
-        bar_rect = pygame.Rect(rect.x + 70, rect.y + 78, rect.width - 170, 16)
+        bar_rect = pygame.Rect(rect.x + 70, rect.y + 78, rect.width - 170, SERVER_BAR_HEIGHT)
         temp_range = server.max_temperature - SERVER_BASE_TEMP
         current = server.temperature - SERVER_BASE_TEMP
         pct = max(0.0, min(1.0, current / temp_range)) if temp_range > 0 else 0.0
@@ -433,7 +411,7 @@ class GameView:
         label = self.font_small.render("PROG", False, COLOR_TEXT_DIM)
         self.screen.blit(label, (rect.x + 15, rect.y + 105))
 
-        bar_rect = pygame.Rect(rect.x + 70, rect.y + 108, rect.width - 170, 16)
+        bar_rect = pygame.Rect(rect.x + 70, rect.y + 108, rect.width - 170, SERVER_BAR_HEIGHT)
 
         if server.current_job:
             pct = 1.0 - (server.current_job.remaining_work / server.current_job.total_work)
@@ -446,12 +424,12 @@ class GameView:
         if server.state != ServerState.IDLE:
             return
 
-        btn = pygame.Rect(rect.right - 95, rect.y + 100, 85, 30)
+        btn = pygame.Rect(rect.right - 95, rect.y + 100, SERVER_BTN_WIDTH, SERVER_BTN_HEIGHT)
         self._add_hitbox(btn, "server_sell", server)
 
         if btn.collidepoint(mouse_pos):
-            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=4)
-        pygame.draw.rect(self.screen, COLOR_OVERHEAT, btn, 1, border_radius=4)
+            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=BAR_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_OVERHEAT, btn, 1, border_radius=BAR_RADIUS)
 
         label = self.font_small.render(f"SELL ${server.sell_value():,.0f}", False, COLOR_OVERHEAT)
         self.screen.blit(label, label.get_rect(center=btn.center))
@@ -460,39 +438,38 @@ class GameView:
         if server.current_job is None:
             return
 
-        btn = pygame.Rect(rect.right - 95, rect.y + 100, 85, 30)
+        btn = pygame.Rect(rect.right - 95, rect.y + 100, SERVER_BTN_WIDTH, SERVER_BTN_HEIGHT)
         self._add_hitbox(btn, "server_unload", server)
 
         if btn.collidepoint(mouse_pos):
-            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=4)
-        pygame.draw.rect(self.screen, COLOR_WARN, btn, 1, border_radius=4)
+            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=BAR_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_WARN, btn, 1, border_radius=BAR_RADIUS)
 
         label = self.font_small.render("UNLOAD", False, COLOR_WARN)
         self.screen.blit(label, label.get_rect(center=btn.center))
 
     def _draw_bar(self, rect, pct, fill_color):
-        pygame.draw.rect(self.screen, COLOR_PANEL, rect, border_radius=4)
-        pygame.draw.rect(self.screen, COLOR_BORDER, rect, 1, border_radius=4)
+        pygame.draw.rect(self.screen, COLOR_PANEL, rect, border_radius=BAR_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_BORDER, rect, 1, border_radius=BAR_RADIUS)
 
         if pct > 0:
             fill_rect = pygame.Rect(rect.x, rect.y, int(rect.width * pct), rect.height)
-            pygame.draw.rect(self.screen, fill_color, fill_rect, border_radius=4)
+            pygame.draw.rect(self.screen, fill_color, fill_rect, border_radius=BAR_RADIUS)
 
     def _draw_finance_panel(self, economy, start_x, width, mouse_pos, selected_job):
         self._draw_panel_bg(start_x, width)
 
-        # title
         balance_text = self.font.render(f"Balance: ${economy.balance:.2f}", False, COLOR_TEXT)
-        self.screen.blit(balance_text, (start_x + 20, TAB_BAR_HEIGHT + 20))
+        self.screen.blit(balance_text, (start_x + PANEL_PADDING, TAB_BAR_HEIGHT + PANEL_PADDING))
 
         y = TAB_BAR_HEIGHT + 90
         title = self.font.render("--OWNED JOBS--", False, COLOR_TEXT)
-        self.screen.blit(title, (start_x + 20, y))
+        self.screen.blit(title, (start_x + PANEL_PADDING, y))
         y += 45
 
         if not economy.jobs:
             empty = self.font_small.render("No jobs yet. Buy some!", False, COLOR_TEXT_DIM)
-            self.screen.blit(empty, (start_x + 20, y))
+            self.screen.blit(empty, (start_x + PANEL_PADDING, y))
             return
 
         for job in economy.jobs:
@@ -508,9 +485,9 @@ class GameView:
                 self._add_hitbox(rect, "sellable_job", job)
 
             if job is selected_job:
-                pygame.draw.rect(self.screen, COLOR_SELECT, rect, 2, border_radius=4)
+                pygame.draw.rect(self.screen, COLOR_SELECT, rect, 2, border_radius=BAR_RADIUS)
             elif selectable and rect.collidepoint(mouse_pos):
-                pygame.draw.rect(self.screen, COLOR_ROW_HOVER, rect, border_radius=4)
+                pygame.draw.rect(self.screen, COLOR_ROW_HOVER, rect, border_radius=BAR_RADIUS)
 
             name_color = COLOR_TEXT if (selectable or sellable) else COLOR_TEXT_DIM
             name_surf = self.font_small.render(job.name, False, name_color)
@@ -542,10 +519,10 @@ class GameView:
 
         w, h = self.screen.get_size()
         shade = pygame.Surface((w, h), pygame.SRCALPHA)
-        shade.fill((0, 0, 0, 200))
+        shade.fill((0, 0, 0, OVERLAY_ALPHA))
         self.screen.blit(shade, (0, 0))
 
-        box = pygame.Rect(0, 0, 800, 420)
+        box = pygame.Rect(0, 0, GAME_OVER_BOX_WIDTH, GAME_OVER_BOX_HEIGHT)
         box.center = (w // 2, h // 2)
         pygame.draw.rect(self.screen, COLOR_PANEL, box, border_radius=CARD_RADIUS)
         pygame.draw.rect(self.screen, COLOR_OVERHEAT, box, 3, border_radius=CARD_RADIUS)
@@ -562,10 +539,10 @@ class GameView:
         for text, font, color in lines:
             surf = font.render(text, False, color)
             self.screen.blit(surf, surf.get_rect(midtop=(box.centerx, y)))
-            y += surf.get_height() + 25
+            y += surf.get_height() + MENU_BTN_GAP
 
-        btn_restart = pygame.Rect(0, 0, 280, 60)
-        btn_restart.midbottom = (box.centerx - 160, box.bottom - 40)
+        btn_restart = pygame.Rect(0, 0, GAME_OVER_BTN_WIDTH, GAME_OVER_BTN_HEIGHT)
+        btn_restart.midbottom = (box.centerx - GAME_OVER_BTN_OFFSET_X, box.bottom - 40)
         self._add_hitbox(btn_restart, "restart", None)
 
         if btn_restart.collidepoint(mouse_pos):
@@ -574,8 +551,8 @@ class GameView:
         lbl_restart = self.font.render("RESTART [R]", False, COLOR_TEXT)
         self.screen.blit(lbl_restart, lbl_restart.get_rect(center=btn_restart.center))
 
-        btn_menu = pygame.Rect(0, 0, 280, 60)
-        btn_menu.midbottom = (box.centerx + 160, box.bottom - 40)
+        btn_menu = pygame.Rect(0, 0, GAME_OVER_BTN_WIDTH, GAME_OVER_BTN_HEIGHT)
+        btn_menu.midbottom = (box.centerx + GAME_OVER_BTN_OFFSET_X, box.bottom - 40)
         self._add_hitbox(btn_menu, "game_over_menu", None)
 
         if btn_menu.collidepoint(mouse_pos):
@@ -595,42 +572,39 @@ class GameView:
 
         x0 = TABLE_MARGIN
         full_w = w - 2 * TABLE_MARGIN
-        gap = 20
         y = TAB_BAR_HEIGHT + 80
 
         cashflow = economy.cashflow_per_minute()
         runway = economy.runway_seconds()
         if runway is None:
             runway_str, runway_color = "NO COSTS", COLOR_TEXT_DIM
-        elif runway > 3600:
+        elif runway > RUNWAY_MAX_DISPLAY_SEC:
             runway_str, runway_color = ">1h", COLOR_TEXT
         else:
             runway_str = f"{int(runway) // 60}m {int(runway) % 60:02d}s"
-            runway_color = COLOR_OVERHEAT if runway < 60 else COLOR_TEXT
+            runway_color = COLOR_OVERHEAT if runway < RUNWAY_WARN_SEC else COLOR_TEXT
 
         kpis = [
             ("BALANCE", f"${economy.balance:,.0f}",
              COLOR_TEXT if economy.balance >= 0 else COLOR_OVERHEAT),
             ("OPEX / SEC", f"${economy.current_opex_per_sec():,.2f}", COLOR_TEXT),
-            ("NET CASH CHANGE / MIN (60s)", self._signed_money(cashflow),
+            (f"NET CASH CHANGE / MIN ({CASHFLOW_WINDOW:.0f}s)", self._signed_money(cashflow),
              COLOR_TEXT if cashflow >= 0 else COLOR_OVERHEAT),
             ("RUNWAY (AT CURRENT OPEX)", runway_str, runway_color),
             ("PROCESSING SERVERS", f"{economy.active_server_count()}/{len(economy.servers)}", COLOR_TEXT),
         ]
-        card_w = (full_w - gap * (len(kpis) - 1)) // len(kpis)
-        card_h = 100
+        card_w = (full_w - SECTION_GAP * (len(kpis) - 1)) // len(kpis)
         for i, (label, value, color) in enumerate(kpis):
-            rect = pygame.Rect(x0 + i * (card_w + gap), y, card_w, card_h)
+            rect = pygame.Rect(x0 + i * (card_w + SECTION_GAP), y, card_w, KPI_CARD_HEIGHT)
             self._draw_kpi_card(rect, label, value, color)
-        y += card_h + 30
+        y += KPI_CARD_HEIGHT + SECTION_GAP_LARGE
 
-        chart_h = 250
-        self._draw_balance_chart(economy.balance_history, pygame.Rect(x0, y, full_w, chart_h))
-        y += chart_h + 30
+        self._draw_balance_chart(economy.balance_history, pygame.Rect(x0, y, full_w, BALANCE_CHART_HEIGHT))
+        y += BALANCE_CHART_HEIGHT + SECTION_GAP_LARGE
 
-        half_w = (full_w - gap) // 2
+        half_w = (full_w - SECTION_GAP) // 2
         self._draw_statement("INCOME STATEMENT (SINCE START)", self._income_rows(economy), x0, y, half_w)
-        self._draw_statement("CASH-FLOW STATEMENT (SINCE START)", self._cashflow_rows(economy), x0 + half_w + gap, y, half_w)
+        self._draw_statement("CASH-FLOW STATEMENT (SINCE START)", self._cashflow_rows(economy), x0 + half_w + SECTION_GAP, y, half_w)
 
     def _draw_kpi_card(self, rect, label, value, color):
         pygame.draw.rect(self.screen, COLOR_PANEL_LIGHT, rect, border_radius=CARD_RADIUS)
@@ -660,7 +634,7 @@ class GameView:
         if v_max == v_min:
             v_max += 100
             v_min -= 100
-        pad = (v_max - v_min) * 0.1
+        pad = (v_max - v_min) * BALANCE_CHART_PAD_RATIO
         v_min -= pad
         v_max += pad
 
@@ -739,4 +713,4 @@ class GameView:
                     color = COLOR_TEXT if value >= 0 else COLOR_OVERHEAT
                 value_surf = self.font.render(text, False, color)
                 self.screen.blit(value_surf, (x + w - value_surf.get_width() - 10, y))
-            y += 34
+            y += STATEMENT_ROW_HEIGHT

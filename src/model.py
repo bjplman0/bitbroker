@@ -1,4 +1,5 @@
 from settings import (
+    CASHFLOW_WINDOW,
     SERVER_BASE_TEMP,
     SERVER_HEATING_RATE,
     SERVER_COOLING_RATE,
@@ -21,6 +22,7 @@ from settings import (
     BALANCE_HISTORY_LENGTH,
     LEDGER_MAX_ENTRIES,
     DEFAULT_STARTING_BALANCE,
+    MAX_OWNED_JOBS
 )
 from name_generator import generate_name
 import random
@@ -383,6 +385,9 @@ class EconomyModel:
         self.jobs.append(job)
 
     def buy_job(self, job):
+        if len(self.jobs) >= MAX_OWNED_JOBS:
+            print("Cannot buy job: Inventory full.")
+            return
         if job not in self.job_market:
             print(f"Cannot buy job: {job.name} is not available in the job market.")
             return
@@ -450,7 +455,7 @@ class EconomyModel:
         opex = self.current_opex_per_sec()
         return self.balance / opex if opex > 0 else None
 
-    def cashflow_per_minute(self, window=60.0):
+    def cashflow_per_minute(self, window=CASHFLOW_WINDOW):
         if len(self.balance_history) < 2:
             return 0.0
         t_now, b_now = self.balance_history[-1]
