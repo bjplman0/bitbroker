@@ -2,6 +2,7 @@ SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 FPS = 60
 CAPTION = "Jatek v0.1"
+SAVE_FILE_PATH = "savegame.json"
 
 COLOR_BG = (0, 0, 0)
 COLOR_PANEL = (15, 25, 15)

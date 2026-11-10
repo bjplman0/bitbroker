@@ -33,7 +33,7 @@ class GameView:
             "financial": self._draw_financial,
         }
 
-    def draw(self, economy, states, active_tab_key, mouse_pos):
+    def draw(self, economy, states, active_tab_key, mouse_pos, paused=False):
         self.screen.fill(COLOR_BG)
         self.hitboxes.clear()
 
@@ -44,8 +44,94 @@ class GameView:
 
         if economy.game_over:
             self._draw_game_over(economy, mouse_pos)
+        elif paused:
+            self._draw_pause_menu(mouse_pos)
             
         pygame.display.flip()
+
+    def draw_main_menu(self, mouse_pos, can_continue):
+        self.screen.fill(COLOR_BG)
+        self.hitboxes.clear()
+
+        w, h = self.screen.get_size()
+        pygame.draw.rect(self.screen, COLOR_PANEL, (0, 0, w, h))
+        pygame.draw.rect(self.screen, COLOR_BORDER, (0, 0, w, h), 2)
+
+        box = pygame.Rect(0, 0, 520, 440)
+        box.center = (w // 2, h // 2)
+        pygame.draw.rect(self.screen, COLOR_PANEL_LIGHT, box, border_radius=CARD_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_BORDER, box, 2, border_radius=CARD_RADIUS)
+
+        title_surf = self.font.render("---THESISGAME---", False, COLOR_TEXT)
+        self.screen.blit(title_surf, title_surf.get_rect(midtop=(box.centerx, box.y + 45)))
+
+        subtitle_surf = self.font_small.render("SERVER PARK MANAGEMENT SIMULATION", False, COLOR_TEXT_DIM)
+        self.screen.blit(subtitle_surf, subtitle_surf.get_rect(midtop=(box.centerx, box.y + 90)),)
+
+        buttons = [
+            ("NEW GAME", "menu_new", True),
+            ("CONTINUE", "menu_continue", can_continue),
+            ("QUIT", "menu_quit", True),
+        ]
+
+        btn_w, btn_h = 320, 60
+        y = box.y + 150
+        for label_text, kind, enabled in buttons:
+            btn = pygame.Rect(0, 0, btn_w, btn_h)
+            btn.midtop = (box.centerx, y)
+
+            if enabled:
+                self._add_hitbox(btn, kind, None)
+                if btn.collidepoint(mouse_pos):
+                    pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=CARD_RADIUS,)
+                border_color = COLOR_TEXT
+                text_color = COLOR_TEXT
+            else:
+                border_color = COLOR_TEXT_DIM
+                text_color = COLOR_TEXT_DIM
+
+            pygame.draw.rect(self.screen, border_color, btn, 2, border_radius=CARD_RADIUS)
+            lbl = self.font.render(label_text, False, text_color)
+            self.screen.blit(lbl, lbl.get_rect(center=btn.center))
+            y += btn_h + 25
+
+        pygame.display.flip()
+
+    def _draw_pause_menu(self, mouse_pos):
+        self.hitboxes.clear()
+
+        w, h = self.screen.get_size()
+        shade = pygame.Surface((w, h), pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 200))
+        self.screen.blit(shade, (0, 0))
+
+        box = pygame.Rect(0, 0, 520, 320)
+        box.center = (w // 2, h // 2)
+        pygame.draw.rect(self.screen, COLOR_PANEL, box, border_radius=CARD_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_BORDER, box, 3, border_radius=CARD_RADIUS)
+
+        title = self.font.render("--PAUSED--", False, COLOR_TEXT)
+        self.screen.blit(title, title.get_rect(midtop=(box.centerx, box.y + 40)))
+
+        buttons = [
+            ("RETURN TO GAME [ESC]", "pause_resume"),
+            ("SAVE & QUIT TO MENU", "pause_save_quit"),
+        ]
+
+        btn_w, btn_h = 360, 60
+        y = box.y + 115
+        for label_text, kind in buttons:
+            btn = pygame.Rect(0, 0, btn_w, btn_h)
+            btn.midtop = (box.centerx, y)
+            self._add_hitbox(btn, kind, None)
+
+            if btn.collidepoint(mouse_pos):
+                pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=CARD_RADIUS)
+            pygame.draw.rect(self.screen, COLOR_TEXT, btn, 2, border_radius=CARD_RADIUS)
+
+            lbl = self.font.render(label_text, False, COLOR_TEXT)
+            self.screen.blit(lbl, lbl.get_rect(center=btn.center))
+            y += btn_h + 25
 
     def _add_hitbox(self, rect, kind, obj):
         self.hitboxes.append({"rect": rect, "kind": kind, "obj": obj})
@@ -478,16 +564,25 @@ class GameView:
             self.screen.blit(surf, surf.get_rect(midtop=(box.centerx, y)))
             y += surf.get_height() + 25
 
-        btn = pygame.Rect(0, 0, 300, 60)
-        btn.midbottom = (box.centerx, box.bottom - 40)
-        self._add_hitbox(btn, "restart", None)
+        btn_restart = pygame.Rect(0, 0, 280, 60)
+        btn_restart.midbottom = (box.centerx - 160, box.bottom - 40)
+        self._add_hitbox(btn_restart, "restart", None)
 
-        if btn.collidepoint(mouse_pos):
-            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn, border_radius=CARD_RADIUS)
-        pygame.draw.rect(self.screen, COLOR_TEXT, btn, 2, border_radius=CARD_RADIUS)
+        if btn_restart.collidepoint(mouse_pos):
+            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn_restart, border_radius=CARD_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_TEXT, btn_restart, 2, border_radius=CARD_RADIUS)
+        lbl_restart = self.font.render("RESTART [R]", False, COLOR_TEXT)
+        self.screen.blit(lbl_restart, lbl_restart.get_rect(center=btn_restart.center))
 
-        label = self.font.render("RESTART [R]", False, COLOR_TEXT)
-        self.screen.blit(label, label.get_rect(center=btn.center))
+        btn_menu = pygame.Rect(0, 0, 280, 60)
+        btn_menu.midbottom = (box.centerx + 160, box.bottom - 40)
+        self._add_hitbox(btn_menu, "game_over_menu", None)
+
+        if btn_menu.collidepoint(mouse_pos):
+            pygame.draw.rect(self.screen, COLOR_ROW_HOVER, btn_menu, border_radius=CARD_RADIUS)
+        pygame.draw.rect(self.screen, COLOR_TEXT, btn_menu, 2, border_radius=CARD_RADIUS)
+        lbl_menu = self.font.render("MAIN MENU [ESC]", False, COLOR_TEXT)
+        self.screen.blit(lbl_menu, lbl_menu.get_rect(center=btn_menu.center))
 
     def _signed_money(self, value, decimals=0):
         sign = "+" if value >= 0 else "-"

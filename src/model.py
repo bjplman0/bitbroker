@@ -19,7 +19,8 @@ from settings import (
     SERVER_CATALOG,
     BALANCE_SAMPLE_INTERVAL,
     BALANCE_HISTORY_LENGTH,
-    LEDGER_MAX_ENTRIES
+    LEDGER_MAX_ENTRIES,
+    DEFAULT_STARTING_BALANCE,
 )
 from name_generator import generate_name
 import random
@@ -35,6 +36,30 @@ class Job:
         self.cost = cost
         self.is_decrypted = False
         self.time_left = lifetime
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "total_work": self.total_work,
+            "remaining_work": self.remaining_work,
+            "data_type": self.data_type,
+            "cost": self.cost,
+            "is_decrypted": self.is_decrypted,
+            "time_left": self.time_left,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        job = cls(
+            name=data["name"],
+            total_work=float(data["total_work"]),
+            data_type=data["data_type"],
+            cost=float(data.get("cost", 0.0)),
+            lifetime=float(data.get("time_left", 0.0)),
+        )
+        job.remaining_work = float(data.get("remaining_work", job.total_work))
+        job.is_decrypted = bool(data.get("is_decrypted", False))
+        return job
 
 class JobGenerator:
     def __init__(self, market):
@@ -155,6 +180,48 @@ class Server:
 
         return finished_job
 
+    def to_dict(self, jobs_list):
+        job_index = None
+        if self.current_job is not None and self.current_job in jobs_list:
+            job_index = jobs_list.index(self.current_job)
+
+        return {
+            "name": self.name,
+            "capex": self.capex,
+            "opex_per_sec": self.opex_per_sec,
+            "processing_speed": self.processing_speed,
+            "max_temperature": self.max_temperature,
+            "idle_multiplier": self.idle_multiplier,
+            "state": self.state.value,
+            "temperature": self.temperature,
+            "age": self.age,
+            "current_job_index": job_index,
+        }
+
+    @classmethod
+    def from_dict(cls, data, jobs_list):
+        server = cls(
+            name=data["name"],
+            capex=float(data["capex"]),
+            opex=float(data["opex_per_sec"]),
+            processing_speed=float(data["processing_speed"]),
+            max_temperature=float(data["max_temperature"]),
+            idle_multiplier=float(data["idle_multiplier"]),
+        )
+        server.state = ServerState(data.get("state", "IDLE"))
+        server.temperature = float(data.get("temperature", SERVER_BASE_TEMP))
+        server.age = float(data.get("age", 0.0))
+
+        job_index = data.get("current_job_index")
+        if job_index is not None and 0 <= job_index < len(jobs_list):
+            server.current_job = jobs_list[job_index]
+        else:
+            server.current_job = None
+            if server.state == ServerState.WORKING:
+                server.state = ServerState.IDLE
+
+        return server
+
 class DataCategory:
     def __init__(self, name, base_price, volatility, gravity, min_price, max_price):
         self.name = name
@@ -178,6 +245,26 @@ class DataCategory:
         self.price_history.append(self.current_price)
         if len(self.price_history) > self.history_length:
             self.price_history.pop(0)
+
+    def to_dict(self):
+        return {
+            "current_price": self.current_price,
+            "price_history": list(self.price_history),
+        }
+
+    def load_dict(self, data):
+        history = data.get("price_history")
+        if isinstance(history, list) and len(history) > 0:
+            self.price_history = [
+                float(p) for p in history[-self.history_length :]
+            ]
+            self.current_price = float(
+                data.get("current_price", self.price_history[-1])
+            )
+        else:
+            self.current_price = float(
+                data.get("current_price", self.base_price)
+            )
 
 class Market:
     def __init__(self):
@@ -206,6 +293,26 @@ class Market:
         if data_type in self.categories:
             return self.categories[data_type].current_price
         return 0.0
+
+    def to_dict(self):
+        return {
+            "time_since_last_tick": self.time_since_last_tick,
+            "categories": {
+                name: cat.to_dict() for name, cat in self.categories.items()
+            },
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        market = cls()
+        market.time_since_last_tick = float(
+            data.get("time_since_last_tick", 0.0)
+        )
+        cat_data = data.get("categories", {})
+        for name, c_dict in cat_data.items():
+            if name in market.categories:
+                market.categories[name].load_dict(c_dict)
+        return market
     
 class EconomyModel:
     def __init__(self, starting_balance):
@@ -458,4 +565,56 @@ class EconomyModel:
 
         self._check_bankruptcy()
 
-        
+    def to_dict(self):
+        return {
+            "balance": self.balance,
+            "starting_balance": self.starting_balance,
+            "elapsed_time": self.elapsed_time,
+            "_next_server_id": self._next_server_id,
+            "_time_since_sample": self._time_since_sample,
+            "jobs": [job.to_dict() for job in self.jobs],
+            "servers": [server.to_dict(self.jobs) for server in self.servers],
+            "job_market": [job.to_dict() for job in self.job_market],
+            "market": self.market.to_dict(),
+            "totals": dict(self.totals),
+            "balance_history": [
+                [t, b] for t, b in self.balance_history
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        starting_balance = float(
+            data.get("starting_balance", DEFAULT_STARTING_BALANCE)
+        )
+        model = cls(starting_balance=starting_balance)
+        model.balance = float(data["balance"])
+        model.elapsed_time = float(data.get("elapsed_time", 0.0))
+        model._next_server_id = int(data.get("_next_server_id", 1))
+        model._time_since_sample = float(data.get("_time_since_sample", 0.0))
+
+        model.jobs = [Job.from_dict(j) for j in data.get("jobs", [])]
+        model.servers = [
+            Server.from_dict(s, model.jobs) for s in data.get("servers", [])
+        ]
+        model.job_market = [
+            Job.from_dict(j) for j in data.get("job_market", [])
+        ]
+
+        if "market" in data:
+            model.market = Market.from_dict(data["market"])
+            model.job_generator.market = model.market
+
+        saved_totals = data.get("totals", {})
+        for key in model.totals:
+            if key in saved_totals:
+                model.totals[key] = float(saved_totals[key])
+
+        model.balance_history.clear()
+        for entry in data.get("balance_history", []):
+            if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                model.balance_history.append((float(entry[0]), float(entry[1])))
+        if not model.balance_history:
+            model.balance_history.append((model.elapsed_time, model.balance))
+
+        return model
