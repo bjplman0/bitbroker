@@ -5,7 +5,7 @@ from model import ServerState
 class GameView:
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED)
         pygame.display.set_caption(CAPTION)
         self.font = pygame.font.Font(FONT_PATH, FONT_SIZE)
         self.font_small = pygame.font.Font(FONT_PATH, FONT_SIZE_SMALL)

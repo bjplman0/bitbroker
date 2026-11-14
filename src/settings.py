@@ -1,8 +1,11 @@
+from pathlib import Path
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 FPS = 60
 CAPTION = "BitBroker"
-SAVE_FILE_PATH = "savegame.json"
+BASE_DIR = Path(__file__).resolve().parent
+SAVE_FILE_PATH = str(BASE_DIR.parent / "savegame.json")
+
 
 #colors
 COLOR_BG = (0, 0, 0)
@@ -20,7 +23,7 @@ COLOR_ROW_HOVER = (25, 50, 25)
 OVERLAY_ALPHA = 200
 
 #font
-FONT_PATH = "src/VT323-Regular.ttf"
+FONT_PATH = str(BASE_DIR / "VT323-Regular.ttf")
 FONT_SIZE = 32
 FONT_SIZE_SMALL = 20
 
