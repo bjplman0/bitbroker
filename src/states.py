@@ -13,7 +13,7 @@ class BaseState:
         pass
 
 class DashboardState(BaseState):
-    label = "Dashboard"
+    label = "[F1] Dashboard"
 
     def __init__(self):
         self.selected_job = None
@@ -42,7 +42,10 @@ class DashboardState(BaseState):
         self.selected_job = None
 
 class MarketplaceState(BaseState):
-    label = "Marketplace"
+    label = "[F2] Marketplace"
+
+    def __init__(self):
+        self.last_purchased_model = None
 
     def handle_click(self, hit, economy):
         if hit is None:
@@ -51,7 +54,10 @@ class MarketplaceState(BaseState):
         if kind == "job":
             economy.buy_job(obj)
         elif kind == "server_offer":
+            old_server_count = len(economy.servers)
             economy.buy_server(obj)
+            if len(economy.servers) > old_server_count:
+                self.last_purchased_model = obj["model"]
 
 class FinancialState(BaseState):
-    label = "Financial"
+    label = "[F3] Financial"

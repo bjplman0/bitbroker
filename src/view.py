@@ -16,13 +16,15 @@ class GameView:
             "marketplace": self._draw_marketplace,
             "financial": self._draw_financial,
         }
+        self.server_flash_model = None
+        self.server_flash_time = 0
 
     def draw(self, economy, states, active_tab_key, mouse_pos, paused=False):
         self.screen.fill(COLOR_BG)
         self.hitboxes.clear()
 
         tabs = {key: state.label for key, state in states.items()}
-        self._draw_tab_bar(tabs, active_tab_key)
+        self._draw_tab_bar(tabs, active_tab_key, economy)
 
         self.renderers[active_tab_key](economy, mouse_pos, states[active_tab_key])
 
@@ -189,9 +191,9 @@ class GameView:
                                  (table_x, row_rect.bottom), (table_x + table_w, row_rect.bottom), 1)
                 y += ROW_HEIGHT
         y += SECTION_GAP_LARGE
-        self._draw_server_shop(economy, mouse_pos, table_x, table_w, y)
+        self._draw_server_shop(economy, mouse_pos, table_x, table_w, y, state)
 
-    def _draw_server_shop(self, economy, mouse_pos, table_x, table_w, y):
+    def _draw_server_shop(self, economy, mouse_pos, table_x, table_w, y, state):
         title = self.font.render("---SERVER SHOP---", False, COLOR_TEXT)
         self.screen.blit(title, (table_x, y))
 
@@ -208,12 +210,21 @@ class GameView:
 
         park_full = len(economy.servers) >= MAX_SERVERS
 
+        if state.last_purchased_model is not None:
+            self.server_flash_model = state.last_purchased_model
+            self.server_flash_time = pygame.time.get_ticks()
+            state.last_purchased_model = None
+
         for offer in SERVER_CATALOG:
             row_rect = pygame.Rect(table_x, y, table_w, ROW_HEIGHT)
             self._add_hitbox(row_rect, "server_offer", offer)
 
             affordable = economy.balance >= offer["capex"]
-            if affordable and not park_full and row_rect.collidepoint(mouse_pos):
+            flashing = (self.server_flash_model == offer["model"] and pygame.time.get_ticks() - self.server_flash_time < 150 )
+
+            if flashing:
+                pygame.draw.rect(self.screen, COLOR_TEXT_DIM, row_rect)
+            elif affordable and not park_full and row_rect.collidepoint(mouse_pos):
                 pygame.draw.rect(self.screen, COLOR_ROW_HOVER, row_rect)
 
             text_color = COLOR_TEXT_DIM if park_full else COLOR_TEXT
@@ -241,7 +252,7 @@ class GameView:
             x -= surf.get_width()
         self.screen.blit(surf, (x, y))
 
-    def _draw_tab_bar(self, tabs, active_tab_key):
+    def _draw_tab_bar(self, tabs, active_tab_key, economy):
         pygame.draw.rect(self.screen, COLOR_PANEL, (0, 0, SCREEN_WIDTH, TAB_BAR_HEIGHT))
         pygame.draw.rect(self.screen, COLOR_BORDER, (0, 0, SCREEN_WIDTH, TAB_BAR_HEIGHT), 2)
 
@@ -253,12 +264,16 @@ class GameView:
             color = COLOR_TEXT if is_active else COLOR_TEXT_DIM
 
             text_surface = self.font.render(label, False, color)
-            text_rect = text_surface.get_rect(topleft=(x, 12))
+            text_rect = text_surface.get_rect(topleft=(x, TAB_TEXT_Y))
             self.screen.blit(text_surface, text_rect)
 
             self.tab_rects[key] = text_rect
 
             x += text_rect.width + TAB_ITEM_SPACING
+
+        balance_surf = self.font.render(f"Balance: ${economy.balance:,.2f}", False, COLOR_TEXT)
+        balance_x = SCREEN_WIDTH - PANEL_PADDING - balance_surf.get_width()
+        self.screen.blit(balance_surf, (balance_x, TAB_TEXT_Y))
 
     def _draw_panel_bg(self, start_x, width):
         panel_rect = pygame.Rect(start_x, TAB_BAR_HEIGHT, width, SCREEN_HEIGHT - TAB_BAR_HEIGHT)
@@ -458,10 +473,7 @@ class GameView:
     def _draw_finance_panel(self, economy, start_x, width, mouse_pos, selected_job):
         self._draw_panel_bg(start_x, width)
 
-        balance_text = self.font.render(f"Balance: ${economy.balance:.2f}", False, COLOR_TEXT)
-        self.screen.blit(balance_text, (start_x + PANEL_PADDING, TAB_BAR_HEIGHT + PANEL_PADDING))
-
-        y = TAB_BAR_HEIGHT + 90
+        y = TAB_BAR_HEIGHT + PANEL_PADDING
         title = self.font.render("--OWNED JOBS--", False, COLOR_TEXT)
         self.screen.blit(title, (start_x + PANEL_PADDING, y))
         y += 45
