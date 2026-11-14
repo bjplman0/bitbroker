@@ -24,7 +24,7 @@ py -3 -m venv .venv
 ```
 
 * **Fejlesztői környezet:** Python 3.14.5, pygame-ce 2.5.8 (SDL 2.32.10), 1920x1080 felbontás.
-* A forráskód elérhető a (https://github.com/bjplman0/szakdoga_jatek) linken is.
+* A forráskód elérhető a (https://github.com/bjplman0/bitbroker) linken is.
 
 ## 2. Irányítás és mentés
 
