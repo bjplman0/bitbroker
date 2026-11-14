@@ -9,7 +9,6 @@ from settings import (
     MAX_SERVERS,
     SERVER_BASE_TEMP,
     SERVER_CATALOG,
-    SERVER_COOLING_RATE,
     SERVER_HEATING_RATE,
     SERVER_LIFETIME,
     SERVER_RESALE_RATIO,
@@ -36,9 +35,9 @@ class TestEconomyVerification(unittest.TestCase):
         server = Server(
             name="Server-01",
             capex=1500.0,
-            opex=10.0,
+            opex=5.0,
             processing_speed=5.0,
-            max_temperature=35.0,
+            max_temperature=80.0,
             idle_multiplier=0.2,
         )
         self.economy.add_server(server)
@@ -49,7 +48,7 @@ class TestEconomyVerification(unittest.TestCase):
 
         self.assertEqual(server.state, ServerState.WORKING)
 
-        # 10 masodperc munka: homerseklet 30 + 10 * 0.1 = 31.0 C, munka 1000 - 50 = 950
+        # 10 masodperc munka: homerseklet 30 + 10 * 1.2 = 42.0 C, munka 1000 - 50 = 950
         self.economy.update(10.0)
         self.assertAlmostEqual(server.temperature, 30.0 + 10.0 * SERVER_HEATING_RATE)
         self.assertAlmostEqual(job.remaining_work, 950.0)
@@ -60,12 +59,12 @@ class TestEconomyVerification(unittest.TestCase):
         self.assertIsNone(server.current_job)
         self.assertAlmostEqual(job.remaining_work, 950.0)
 
-        # Visszateszem a munkat es tulmelegitem (31 C -> >35 C-hoz kell >40 mp)
+        # Visszateszem a munkat es tulmelegitem (42 C -> >80 C-hoz kell >31.67 mp, pl. 35 mp)
         self.economy.assign_job_to_server(0, job)
-        self.economy.update(45.0)
+        self.economy.update(35.0)
         self.assertEqual(server.state, ServerState.OVERHEATED)
 
-        # Tulmelegedett allapotban a munka nem halad, de a teljes OPEX (10/s) vonodik
+        # Tulmelegedett allapotban a munka nem halad, de a teljes OPEX (5/s) vonodik
         work_before = job.remaining_work
         balance_before = self.economy.balance
         self.economy.update(5.0)
@@ -77,19 +76,19 @@ class TestEconomyVerification(unittest.TestCase):
         self.assertIsNone(server.current_job)
         self.assertEqual(server.state, ServerState.OVERHEATED)
 
-        # Teljes lehules utan visszavalt IDLE-be
-        self.economy.update(100.0)
+        # Teljes lehules utan (2.0 C/s-al 30 mp alatt) visszavalt IDLE-be
+        self.economy.update(30.0)
         self.assertEqual(server.temperature, SERVER_BASE_TEMP)
         self.assertEqual(server.state, ServerState.IDLE)
 
     def test_03_job_completion_priority_over_overheat(self):
         # FK-07: Ha a munka pont abban a lepesben keszul el, amikor tulmelegedne, IDLE lesz
-        server = Server("Server-01", 1500.0, 10.0, 5.0, 31.0, 0.2)
+        server = Server("Server-01", 1500.0, 5.0, 5.0, 40.0, 0.2)
         job = Job("Fast-Job", total_work=50.0, data_type="Personal", cost=50.0)
         server.start_job(job)
 
-        # 15 mp alatt 75 munkat vegezne (50-et lenullazza), homerseklet 31.5 C (>31.0) lenne
-        server.update(15.0)
+        # 10 mp alatt 50 munkat vegez (lenullazza), homerseklet 30 + 12 = 42.0 C (>40.0) lenne
+        server.update(10.0)
         self.assertTrue(job.is_decrypted)
         self.assertEqual(job.remaining_work, 0.0)
         self.assertEqual(server.state, ServerState.IDLE)
@@ -151,7 +150,7 @@ class TestEconomyVerification(unittest.TestCase):
         # 2. Negativ egyenleg OPEX miatt
         model_neg = EconomyModel(starting_balance=1505.0)
         model_neg.buy_server(self.basic_template)  # Marad 5 dollar
-        model_neg.update(10.0)  # Idle OPEX: 10 * 0.2 * 10 = 20 dollar -> -15 dollar
+        model_neg.update(10.0)  # Idle OPEX: 5 * 0.2 * 10 = 10 dollar -> -5 dollar
         self.assertLess(model_neg.balance, 0.0)
         self.assertTrue(model_neg.game_over)
 
@@ -178,7 +177,7 @@ class TestEconomyVerification(unittest.TestCase):
             self.assertEqual(len(loaded.jobs), 2)
             self.assertEqual(len(loaded.servers), 1)
 
-            # Ellenorzes: a szerver current_job referenciája UGYANAZ a peldany, mint a jobs[1]
+            # Ellenorzes: a szerver current_job referenciaja UGYANAZ a peldany, mint a jobs[1]
             self.assertIs(loaded.servers[0].current_job, loaded.jobs[1])
 
             # Serult JSON fajl kezelese (FK-18)

@@ -46,7 +46,7 @@ class GameView:
         pygame.draw.rect(self.screen, COLOR_PANEL_LIGHT, box, border_radius=CARD_RADIUS)
         pygame.draw.rect(self.screen, COLOR_BORDER, box, 2, border_radius=CARD_RADIUS)
 
-        title_surf = self.font.render("---THESISGAME---", False, COLOR_TEXT)
+        title_surf = self.font.render("---BITBROKER---", False, COLOR_TEXT)
         self.screen.blit(title_surf, title_surf.get_rect(midtop=(box.centerx, box.y + 45)))
 
         subtitle_surf = self.font_small.render("SERVER PARK MANAGEMENT SIMULATION", False, COLOR_TEXT_DIM)
@@ -141,8 +141,7 @@ class GameView:
 
         count_str = f"{len(economy.job_market)}/{economy.job_generator.pool_max_size}"
         count_surf = self.font.render(count_str, False, COLOR_TEXT_DIM)
-        self.screen.blit(count_surf, (panel_w - TABLE_MARGIN - count_surf.get_width(),
-                                      TAB_BAR_HEIGHT + PANEL_PADDING))
+        self.screen.blit(count_surf, (panel_w - TABLE_MARGIN - count_surf.get_width(), TAB_BAR_HEIGHT + PANEL_PADDING))
 
         table_x = TABLE_MARGIN
         table_w = panel_w - 2 * TABLE_MARGIN

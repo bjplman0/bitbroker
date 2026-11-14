@@ -1,7 +1,7 @@
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 FPS = 60
-CAPTION = "Jatek v0.1"
+CAPTION = "BitBroker"
 SAVE_FILE_PATH = "savegame.json"
 
 #colors
@@ -108,8 +108,8 @@ DEFAULT_STARTING_BALANCE = 5000.0
 
 MAX_SERVERS = 5
 SERVER_BASE_TEMP = 30.0
-SERVER_HEATING_RATE = 0.1
-SERVER_COOLING_RATE = 0.2
+SERVER_HEATING_RATE = 1.2
+SERVER_COOLING_RATE = 2.0
 SERVER_RESALE_RATIO = 0.8
 SERVER_LIFETIME = 600.0
 SERVER_SALVAGE_RATIO = 0.2
@@ -139,7 +139,7 @@ SERVER_CATALOG = [
     {
         "model": "Basic Rack",
         "capex": 1500.0,
-        "opex": 10.0,
+        "opex": 5.0,
         "processing_speed": 5.0,
         "max_temperature": 80.0,
         "idle_multiplier": 0.20
@@ -147,16 +147,16 @@ SERVER_CATALOG = [
     {
         "model": "Mid Rack",
         "capex": 6000.0,
-        "opex": 25.0,
-        "processing_speed": 15.0,
+        "opex": 18.0,
+        "processing_speed": 20.0,
         "max_temperature": 90.0,
         "idle_multiplier": 0.25
     },
     {
         "model": "Enterprise Rack",
         "capex": 25000.0,
-        "opex": 70.0,
-        "processing_speed": 45.0,
+        "opex": 50.0,
+        "processing_speed": 80.0,
         "max_temperature": 100.0,
         "idle_multiplier": 0.30
     }
@@ -164,43 +164,43 @@ SERVER_CATALOG = [
 
 MARKET_CATEGORIES_CONFIG = {
     "Personal": {
-        "base_price": 250.0,
+        "base_price": 600.0,
         "volatility": 0.015,
         "gravity": 0.005,
-        "min_price": 50.0,
-        "max_price": 600.0,
+        "min_price": 200.0,
+        "max_price": 1200.0,
         "job_work_base": 30.0
     },
     "Small Business": {
-        "base_price": 4500.0,
+        "base_price": 3000.0,
         "volatility": 0.02,
         "gravity": 0.008,
-        "min_price": 1500.0,
-        "max_price": 12000.0,
+        "min_price": 1000.0,
+        "max_price": 6000.0,
         "job_work_base": 150.0
     },
     "Large Corporation": {
-        "base_price": 55000.0,
+        "base_price": 15000.0,
         "volatility": 0.04,
         "gravity": 0.002,
-        "min_price": 10000.0,
-        "max_price": 160000.0,
+        "min_price": 4000.0,
+        "max_price": 45000.0,
         "job_work_base": 600.0
     },
     "Government": {
-        "base_price": 55000.0,
+        "base_price": 25000.0,
         "volatility": 0.008,
         "gravity": 0.05,
-        "min_price": 45000.0,
-        "max_price": 70000.0,
+        "min_price": 20000.0,
+        "max_price": 32000.0,
         "job_work_base": 900.0
     },
     "Military": {
-        "base_price": 1500000.0,
+        "base_price": 120000.0,
         "volatility": 0.025,
         "gravity": 0.005,
-        "min_price": 500000.0,
-        "max_price": 4500000.0,
+        "min_price": 40000.0,
+        "max_price": 300000.0,
         "job_work_base": 2000.0
     }
 }
