@@ -17,9 +17,11 @@ Interaktív gazdasági és kapacitásmenedzsment-szimuláció: 2D grafikus ját�
 ### Kézi indítás (alternatív mód)
 Ha a `run.bat` valamiért nem futtatható, a program parancssorból (a projekt gyökérkönyvtárában állva, telepített Python 3.10+ esetén) az alábbi parancsokkal indítható:
 
+```bat
 py -3 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 .venv\Scripts\python.exe src\main.py
+```
 
 * **Fejlesztői környezet:** Python 3.14.5, pygame-ce 2.5.8 (SDL 2.32.10), 1920x1080 felbontás.
 * A forráskód elérhető a ```` linken is.
@@ -61,5 +63,7 @@ A játékban egy adatkereskedelmi vállalkozást irányít **$5,000 induló tők
 
 A szakdolgozat 4. fejezetében dokumentált egységtesztek és szimulációs mérések grafikus ablak nélkül (*headless* módban) közvetlenül futtathatók a projekt gyökérkönyvtárából:
 
+```bat
 .venv\Scripts\python.exe src\test_unit.py
 .venv\Scripts\python.exe src\test_simulation.py
+```
