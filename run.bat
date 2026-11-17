@@ -8,12 +8,16 @@ echo "%~dp0" | findstr /i /c:"\Temp\Temp1_" >nul
 if not errorlevel 1 goto fail_zip
 
 set "PY="
+
 for %%V in (3.14 3.13 3.12 3.11 3.10) do (
     if not defined PY (
-        echo n | py -%%V -c "import sys" >nul 2>&1
-        if not errorlevel 1 set "PY=py -%%V"
+        py -%%V -c "import sys" >nul 2>&1
+        if not errorlevel 1 (
+            set "PY=py -%%V"
+        )
     )
 )
+
 if defined PY goto have_python
 
 echo.
